@@ -9,8 +9,20 @@ type Card = {
   value: string;
   note: string;
   tone: "good" | "mixed" | "risk";
+  action?: "reroll_self" | "swap" | "immunity" | "expose" | "scramble" | "double_vote";
 };
 type Scenario = { title: string; description: string; facts: string[] };
+type RoomSettings = {
+  minPlayers: number;
+  maxPlayers: number;
+  seatsPercent: number;
+  revealSeconds: number;
+  discussionSeconds: number;
+  votingSeconds: number;
+  publicVotes: boolean;
+  excludedCanVote: boolean;
+  victoryRule: "survival" | "legacy";
+};
 type Player = {
   id: string;
   name: string;
@@ -18,10 +30,13 @@ type Player = {
   ready: boolean;
   active: boolean;
   online: boolean;
+  isBot: boolean;
   isYou: boolean;
   revealed: Card[];
   character?: Card[];
   hasVoted: boolean;
+  protected: boolean;
+  doubleVote: boolean;
 };
 type GameState = {
   serverNow: number;
@@ -33,22 +48,10 @@ type GameState = {
     phaseEndsAt: number | null;
     turnSeat: number | null;
     seats: number;
-    settings: {
-      minPlayers: number;
-      maxPlayers: number;
-      seatsPercent: number;
-      revealSeconds: number;
-      discussionSeconds: number;
-      votingSeconds: number;
-      publicVotes: boolean;
-      excludedCanVote: boolean;
-      eventFrequency: "each" | "alternate";
-      victoryRule: "survival" | "legacy";
-    };
+    settings: RoomSettings;
     catastrophe: Scenario | null;
     bunker: Scenario | null;
     outside: Scenario | null;
-    currentEvent: { zone: string; title: string; description: string; impact: string } | null;
     runoff: string[];
     log: { at: number; kind: string; text: string }[];
     outcome: { score: number; title: string; summary: string; legacyReady: boolean; victoryRule: string } | null;
@@ -64,6 +67,9 @@ type GameState = {
     character: Card[];
     revealed: string[];
     voteTarget: string | null;
+    canManageBots: boolean;
+    canControlPhases: boolean;
+    abilityUsed: boolean;
   };
 };
 
@@ -75,9 +81,31 @@ const phaseCopy: Record<string, { eyebrow: string; title: string; hint: string }
   discussion: { eyebrow: "Спільний канал", title: "Відкрита дискусія", hint: "Порівняйте ризики, прогалини та комбінації навичок." },
   voting: { eyebrow: "Рішення групи", title: "Таємне голосування", hint: "Оберіть людину, без якої група має найбільші шанси." },
   runoff: { eyebrow: "Нічия", title: "Переголосування", hint: "Вибір обмежено кандидатами з однаковим результатом." },
-  event: { eyebrow: "Оперативне зведення", title: "Нова обставина", hint: "Умови змінилися. Врахуйте це в наступному раунді." },
   finished: { eyebrow: "Протокол завершено", title: "Шлюз зачинено", hint: "Система оцінила фінальний склад експедиції." },
 };
+
+const timeOptions = {
+  reveal: [0, 30, 60, 90, 120, 180, 300],
+  discussion: [0, 60, 120, 180, 300, 420, 600],
+  voting: [0, 30, 45, 60, 90, 120, 180, 300],
+};
+
+const categoryNames: Record<string, string> = {
+  profession: "Професія",
+  health: "Здоров’я",
+  biology: "Біологія",
+  phobia: "Фобія",
+  hobby: "Хобі",
+  trait: "Характер",
+  fact: "Факт",
+  baggage: "Багаж",
+};
+
+function durationLabel(seconds: number) {
+  if (seconds === 0) return "Без обмеження";
+  if (seconds < 60) return `${seconds} с`;
+  return seconds % 60 === 0 ? `${seconds / 60} хв` : `${Math.floor(seconds / 60)} хв ${seconds % 60} с`;
+}
 
 function formatSeconds(value: number) {
   const seconds = Math.max(0, Math.ceil(value / 1000));
@@ -116,6 +144,31 @@ function Toggle({
   );
 }
 
+function TimeSelect({
+  label,
+  description,
+  value,
+  options,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: number;
+  options: number[];
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="time-select">
+      <span><strong>{label}</strong><small>{description}</small></span>
+      <select disabled={disabled} value={value} onChange={(event) => onChange(Number(event.target.value))}>
+        {options.map((seconds) => <option key={seconds} value={seconds}>{durationLabel(seconds)}</option>)}
+      </select>
+    </label>
+  );
+}
+
 function Landing({
   busy,
   error,
@@ -137,12 +190,11 @@ function Landing({
     minPlayers: 4,
     maxPlayers: 8,
     seatsPercent: 50,
-    revealSeconds: 35,
-    discussionSeconds: 75,
-    votingSeconds: 45,
+    revealSeconds: 0,
+    discussionSeconds: 0,
+    votingSeconds: 0,
     publicVotes: false,
     excludedCanVote: false,
-    eventFrequency: "each",
     victoryRule: "survival",
   });
 
@@ -165,20 +217,21 @@ function Landing({
         </p>
         <div className="feature-strip">
           <div><b>4–12</b><span>гравців</span></div>
-          <div><b>35–90</b><span>хвилин</span></div>
+          <div><b>∞</b><span>режим без таймерів</span></div>
           <div><b>∞</b><span>сценаріїв</span></div>
         </div>
       </section>
 
       <section className="entry-panel" aria-label="Створити або приєднатися до гри">
+        <div className="guest-badge"><span>✓</span> Гостьовий вхід без реєстрації</div>
         <div className="entry-tabs">
           <button className={tab === "create" ? "active" : ""} onClick={() => setTab("create")}>Нова кімната</button>
           <button className={tab === "join" ? "active" : ""} onClick={() => setTab("join")}>Увійти за кодом</button>
         </div>
 
         <div className="field">
-          <label htmlFor="player-name">Ваше ім’я</label>
-          <input id="player-name" maxLength={24} value={name} onChange={(event) => setName(event.target.value)} placeholder="Наприклад, Марта" autoComplete="nickname" />
+          <label htmlFor="player-name">Ваше ім’я <span className="optional-label">необов’язково</span></label>
+          <input id="player-name" maxLength={24} value={name} onChange={(event) => setName(event.target.value)} placeholder="Залиште порожнім — дамо гостьове ім’я" autoComplete="nickname" />
         </div>
 
         {tab === "join" ? (
@@ -217,18 +270,13 @@ function Landing({
             </button>
             {advanced && (
               <div className="advanced-settings">
-                <div className="range-field">
-                  <span><b>Хід на відкриття</b><em>{settings.revealSeconds} с</em></span>
-                  <input type="range" min="20" max="90" step="5" value={settings.revealSeconds} onChange={(event) => update("revealSeconds", Number(event.target.value))} />
+                <div className="unlimited-preset">
+                  <span><strong>Розмовляйте досхочу</strong><small>Рекомендовано для гри без поспіху</small></span>
+                  <button onClick={() => setSettings((current) => ({ ...current, revealSeconds: 0, discussionSeconds: 0, votingSeconds: 0 }))}>Без таймерів</button>
                 </div>
-                <div className="range-field">
-                  <span><b>Загальна дискусія</b><em>{settings.discussionSeconds} с</em></span>
-                  <input type="range" min="30" max="180" step="15" value={settings.discussionSeconds} onChange={(event) => update("discussionSeconds", Number(event.target.value))} />
-                </div>
-                <div className="range-field">
-                  <span><b>Голосування</b><em>{settings.votingSeconds} с</em></span>
-                  <input type="range" min="20" max="90" step="5" value={settings.votingSeconds} onChange={(event) => update("votingSeconds", Number(event.target.value))} />
-                </div>
+                <TimeSelect label="Хід і розповідь" description="Час на картку та аргументи" value={settings.revealSeconds} options={timeOptions.reveal} onChange={(value) => update("revealSeconds", value)} />
+                <TimeSelect label="Загальна дискусія" description="Обговорення після кола" value={settings.discussionSeconds} options={timeOptions.discussion} onChange={(value) => update("discussionSeconds", value)} />
+                <TimeSelect label="Голосування" description="Час на фінальний вибір" value={settings.votingSeconds} options={timeOptions.voting} onChange={(value) => update("votingSeconds", value)} />
                 <Toggle checked={settings.publicVotes} onChange={(value) => update("publicVotes", value)} label="Відкрите голосування" description="Показувати вибір одразу" />
                 <Toggle checked={settings.excludedCanVote} onChange={(value) => update("excludedCanVote", value)} label="Голос вигнаних" description="Виключені зберігають вплив" />
                 <label className="select-row">
@@ -246,13 +294,13 @@ function Landing({
         {error && <div className="error-note" role="alert">{error}</div>}
         <button
           className="primary-button"
-          disabled={busy || !name.trim() || (tab === "join" && code.length !== 6)}
+          disabled={busy || (tab === "join" && code.length !== 6)}
           onClick={() => tab === "create" ? onCreate({ name, settings: { ...settings, minPlayers: 4 } }) : onJoin({ name, code })}
         >
-          {busy ? "Встановлюємо зв’язок…" : tab === "create" ? "Створити експедицію" : "Увійти до кімнати"}
+          {busy ? "Встановлюємо зв’язок…" : tab === "create" ? "Увійти гостем і створити гру" : "Увійти гостем до кімнати"}
           <span>→</span>
         </button>
-        <p className="privacy-note">Без реєстрації. Приватне досьє зберігається лише у вашій сесії.</p>
+        <p className="privacy-note">Жодних акаунтів чи паролів. Приватне досьє зберігається лише у вашому браузері.</p>
       </section>
       <footer className="landing-footer"><span>Оригінальна онлайн-гра за мотивами жанру соціального виживання</span><b>UA · v1.0</b></footer>
     </main>
@@ -263,15 +311,28 @@ function Lobby({
   state,
   busy,
   onReady,
+  onAddBots,
+  onRemoveBot,
+  onUpdateSettings,
   onLeave,
 }: {
   state: GameState;
   busy: boolean;
   onReady: (ready: boolean) => void;
+  onAddBots: (count: number) => void;
+  onRemoveBot: (botId: string) => void;
+  onUpdateSettings: (settings: RoomSettings) => void;
   onLeave: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [draft, setDraft] = useState<RoomSettings>(state.room.settings);
   const readyCount = state.players.filter((player) => player.ready).length;
+  const botCount = state.players.filter((player) => player.isBot).length;
+  const missingForStart = Math.max(0, state.room.settings.minPlayers - state.players.length);
+  const hasFreeSeats = state.players.length < state.room.settings.maxPlayers;
+  const settingsChanged = JSON.stringify(draft) !== JSON.stringify(state.room.settings);
+  const updateDraft = <K extends keyof RoomSettings>(key: K, value: RoomSettings[K]) =>
+    setDraft((current) => ({ ...current, [key]: value }));
   const copyInvite = async () => {
     const url = new URL(window.location.href);
     url.searchParams.set("room", state.room.code);
@@ -287,8 +348,8 @@ function Lobby({
       </header>
       <section className="lobby-intro">
         <div className="kicker"><span>02</span> Збір групи</div>
-        <h1>Очікуємо готовності</h1>
-        <p>Гра почнеться сама, щойно щонайменше {state.room.settings.minPlayers} гравці будуть у кімнаті й кожен підтвердить готовність.</p>
+        <h1>Зберіть групу й узгодьте правила</h1>
+        <p>Запросіть друзів або додайте ботів. До старту творець кімнати може змінити таймери, правила голосування та кількість місць.</p>
       </section>
       <section className="invite-card">
         <div><small>Код доступу</small><strong>{state.room.code}</strong></div>
@@ -304,8 +365,14 @@ function Lobby({
             {state.players.map((player) => (
               <div className="crew-row" key={player.id}>
                 <span className="seat-number">{String(player.seat).padStart(2, "0")}</span>
-                <span className="avatar">{player.name.slice(0, 1).toUpperCase()}</span>
-                <span className="crew-name"><strong>{player.name}{player.isYou ? " · ви" : ""}</strong><small>{player.online ? "на зв’язку" : "перепідключення…"}</small></span>
+                <span className={`avatar ${player.isBot ? "bot-avatar" : ""}`}>{player.isBot ? "AI" : player.name.slice(0, 1).toUpperCase()}</span>
+                <span className="crew-name">
+                  <strong>{player.name}{player.isYou ? " · ви" : ""}{player.isBot ? " · бот" : ""}</strong>
+                  <small>{player.isBot ? "автономний гравець" : player.online ? "на зв’язку" : "перепідключення…"}</small>
+                </span>
+                {player.isBot && state.you.canManageBots ? (
+                  <button className="remove-bot" disabled={busy} onClick={() => onRemoveBot(player.id)} aria-label={`Прибрати бота ${player.name}`}>×</button>
+                ) : null}
                 <span className={`ready-badge ${player.ready ? "ready" : ""}`}>{player.ready ? "Готовий" : "Очікує"}</span>
               </div>
             ))}
@@ -317,20 +384,89 @@ function Lobby({
           </div>
         </section>
         <aside className="protocol-panel">
-          <div className="panel-heading"><span><small>Параметри</small><strong>Протокол кімнати</strong></span></div>
-          <dl>
-            <div><dt>Місць у сховищі</dt><dd>{state.room.settings.seatsPercent}%</dd></div>
-            <div><dt>Хід гравця</dt><dd>{state.room.settings.revealSeconds} с</dd></div>
-            <div><dt>Дискусія</dt><dd>{state.room.settings.discussionSeconds} с</dd></div>
-            <div><dt>Голосування</dt><dd>{state.room.settings.publicVotes ? "відкрите" : "таємне"}</dd></div>
-            <div><dt>Голос вигнаних</dt><dd>{state.room.settings.excludedCanVote ? "так" : "ні"}</dd></div>
-            <div><dt>Фінальна умова</dt><dd>{state.room.settings.victoryRule === "legacy" ? "спадкоємність" : "виживання"}</dd></div>
-          </dl>
-          <div className="auto-note"><span className="pulse-dot" /><p><strong>Автоматичний ведучий активний</strong>Сервер роздасть картки й керуватиме всіма фазами.</p></div>
+          <div className="panel-heading">
+            <span><small>Правила кімнати</small><strong>{state.you.canManageBots ? "Налаштуйте гру" : "Обрані параметри"}</strong></span>
+            {state.you.canManageBots && <em>Ви — творець</em>}
+          </div>
+          <div className="bot-controls">
+            <div>
+              <span><strong>Гравці-боти</strong><small>Самі відкривають карти й голосують</small></span>
+              <b>{botCount}</b>
+            </div>
+            {state.you.canManageBots ? (
+              <div className="bot-actions">
+                <button disabled={busy || !hasFreeSeats} onClick={() => onAddBots(1)}>+ Додати бота</button>
+                {missingForStart > 1 ? (
+                  <button disabled={busy || !hasFreeSeats} onClick={() => onAddBots(missingForStart)}>Заповнити до старту</button>
+                ) : null}
+              </div>
+            ) : (
+              <p>Додавати й прибирати ботів може творець кімнати.</p>
+            )}
+          </div>
+          {state.you.canManageBots ? (
+            <div className="lobby-settings">
+              <button
+                className="manual-mode-button"
+                onClick={() => setDraft((current) => ({ ...current, revealSeconds: 0, discussionSeconds: 0, votingSeconds: 0 }))}
+              >
+                <span>∞</span><strong>Усі фази без таймерів</strong><small>Гравці самі передають хід, а творець запускає наступну фазу</small>
+              </button>
+              <div className="lobby-setting-grid">
+                <label className="compact-control">
+                  <span>Максимум гравців</span>
+                  <select value={draft.maxPlayers} onChange={(event) => updateDraft("maxPlayers", Number(event.target.value))}>
+                    {Array.from({ length: 9 }, (_, index) => index + 4).map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label className="compact-control">
+                  <span>Місць у бункері</span>
+                  <select value={draft.seatsPercent} onChange={(event) => updateDraft("seatsPercent", Number(event.target.value))}>
+                    <option value={40}>40%</option><option value={50}>50%</option><option value={60}>60%</option>
+                  </select>
+                </label>
+              </div>
+              <TimeSelect label="Хід і розповідь" description="Після відкриття гравець говорить і натискає «Передати хід»" value={draft.revealSeconds} options={timeOptions.reveal} onChange={(value) => updateDraft("revealSeconds", value)} />
+              <TimeSelect label="Загальна дискусія" description="Творець кімнати запускає голосування вручну, якщо таймера немає" value={draft.discussionSeconds} options={timeOptions.discussion} onChange={(value) => updateDraft("discussionSeconds", value)} />
+              <TimeSelect label="Голосування" description="Завершується після всіх голосів або вручну творцем" value={draft.votingSeconds} options={timeOptions.voting} onChange={(value) => updateDraft("votingSeconds", value)} />
+              <Toggle checked={draft.publicVotes} onChange={(value) => updateDraft("publicVotes", value)} label="Відкрите голосування" description="Показувати кількість голосів у реальному часі" />
+              <Toggle checked={draft.excludedCanVote} onChange={(value) => updateDraft("excludedCanVote", value)} label="Голос вигнаних" description="Гравці поза бункером зберігають право голосу" />
+              <label className="select-row">
+                <span><strong>Фінальна умова</strong><small>Як система оцінює склад групи</small></span>
+                <select value={draft.victoryRule} onChange={(event) => updateDraft("victoryRule", event.target.value as RoomSettings["victoryRule"])}>
+                  <option value="survival">Виживання</option><option value="legacy">Спадкоємність</option>
+                </select>
+              </label>
+              <button className="save-rules-button" disabled={busy || !settingsChanged} onClick={() => onUpdateSettings(draft)}>
+                {settingsChanged ? "Зберегти правила" : "Правила збережено"}
+              </button>
+              <small className="ready-reset-note">Після зміни правил живі гравці підтверджують готовність повторно.</small>
+            </div>
+          ) : (
+            <dl className="settings-summary">
+              <div><dt>Гравців</dt><dd>до {state.room.settings.maxPlayers}</dd></div>
+              <div><dt>Місць у сховищі</dt><dd>{state.room.settings.seatsPercent}%</dd></div>
+              <div><dt>Хід і розповідь</dt><dd>{durationLabel(state.room.settings.revealSeconds)}</dd></div>
+              <div><dt>Дискусія</dt><dd>{durationLabel(state.room.settings.discussionSeconds)}</dd></div>
+              <div><dt>Голосування</dt><dd>{durationLabel(state.room.settings.votingSeconds)}</dd></div>
+              <div><dt>Голоси</dt><dd>{state.room.settings.publicVotes ? "відкриті" : "таємні"}</dd></div>
+            </dl>
+          )}
+          <div className="rules-explainer">
+            <strong>Як проходить гра</strong>
+            <ol>
+              <li><b>Відкрийте картку.</b> У першому колі всі починають із професії.</li>
+              <li><b>Розкажіть про себе.</b> Без таймера можна говорити скільки потрібно.</li>
+              <li><b>Передайте хід.</b> Наступний гравець відкриє свою характеристику.</li>
+              <li><b>Обговоріть і голосуйте.</b> Після кола група виключає одного кандидата.</li>
+              <li><b>Активуйте особливі картки.</b> Вони змінюють досьє, обмінюють характеристики або впливають на голоси.</li>
+            </ol>
+            <p>Випадкових подій між раундами більше немає — у центрі гри люди, аргументи й активні картки.</p>
+          </div>
         </aside>
       </div>
       <div className="ready-dock">
-        <span>{state.you.ready ? "Ви готові. Очікуємо решту групи." : "Перевірте зв’язок і підтвердьте готовність."}</span>
+        <span>{state.you.ready ? "Ви готові. Очікуємо решту групи." : `Для старту потрібно щонайменше ${state.room.settings.minPlayers} гравці та готовність усіх.`}</span>
         <button className={state.you.ready ? "secondary-button" : "primary-button"} disabled={busy} onClick={() => onReady(!state.you.ready)}>
           {state.you.ready ? "Скасувати готовність" : "Я готовий"}
         </button>
@@ -373,12 +509,18 @@ function PlayerCard({
     (state.room.phase !== "runoff" || state.room.runoff.includes(player.id));
   const selected = state.you.voteTarget === player.id;
   const isTurn = state.room.phase === "reveal" && state.room.turnSeat === player.seat;
+  const publicVoteCount = Object.values(state.room.votes).filter((targetId) => targetId === player.id).length;
   return (
     <article className={`player-card ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}>
       <div className="player-topline">
-        <span className="avatar small">{player.name.slice(0, 1).toUpperCase()}</span>
-        <div><strong>{player.name}{player.isYou ? " · ви" : ""}</strong><small>Місце {String(player.seat).padStart(2, "0")}</small></div>
+        <span className={`avatar small ${player.isBot ? "bot-avatar" : ""}`}>{player.isBot ? "AI" : player.name.slice(0, 1).toUpperCase()}</span>
+        <div><strong>{player.name}{player.isYou ? " · ви" : ""}</strong><small>Місце {String(player.seat).padStart(2, "0")}{player.isBot ? " · бот" : ""}</small></div>
         <i className={player.online ? "online" : ""} />
+      </div>
+      <div className="player-effects">
+        {player.protected && <span className="effect-shield">Щит −1 голос</span>}
+        {player.doubleVote && <span className="effect-double">Голос ×2</span>}
+        {player.hasVoted && ["voting", "runoff"].includes(state.room.phase) && <span className="effect-voted">Проголосував</span>}
       </div>
       <div className="revealed-list">
         {player.revealed.length ? player.revealed.map((card) => (
@@ -389,10 +531,10 @@ function PlayerCard({
       {isTurn && <div className="turn-badge">Зараз говорить</div>}
       {canVote && (
         <button className={`vote-button ${selected ? "selected" : ""}`} disabled={busy} onClick={() => onVote(player.id)}>
-          {selected ? "Ваш голос" : "Голосувати"}
+          {selected ? "✓ Ваш голос за цього гравця" : "Віддати голос"}
         </button>
       )}
-      {state.room.settings.publicVotes && state.room.votes[player.id] && <span className="public-vote">Голос зафіксовано</span>}
+      {state.room.settings.publicVotes && publicVoteCount > 0 && <span className="public-vote">{publicVoteCount} {publicVoteCount === 1 ? "голос" : "голоси"}</span>}
     </article>
   );
 }
@@ -401,12 +543,27 @@ function Dossier({
   state,
   busy,
   onReveal,
+  onUseAbility,
 }: {
   state: GameState;
   busy: boolean;
   onReveal: (category: string) => void;
+  onUseAbility: (payload: Record<string, unknown>) => void;
 }) {
+  const [abilityTarget, setAbilityTarget] = useState("");
+  const [abilityCategory, setAbilityCategory] = useState("health");
   const yourTurn = state.room.phase === "reveal" && state.room.turnSeat === state.you.seat && state.you.active;
+  const revealedThisRound = state.you.revealed.length >= state.room.round;
+  const ability = state.you.character.find((card) => card.category === "special");
+  const needsTarget = ["swap", "expose", "scramble"].includes(ability?.action ?? "");
+  const needsCategory = ["reroll_self", "swap", "expose", "scramble"].includes(ability?.action ?? "");
+  const votingAbility = ["immunity", "double_vote"].includes(ability?.action ?? "");
+  const abilityAvailable =
+    Boolean(ability?.action) &&
+    state.you.active &&
+    !state.you.abilityUsed &&
+    (!votingAbility || ["voting", "runoff"].includes(state.room.phase));
+  const activeTargets = state.players.filter((player) => player.active && !player.isYou);
   return (
     <aside className="dossier-panel">
       <div className="dossier-header">
@@ -414,6 +571,47 @@ function Dossier({
         <em>{state.you.revealed.length} / {state.you.character.length}</em>
       </div>
       {!state.you.active && <div className="spectator-note">Ви поза основним сховищем, але можете стежити за рішенням групи{state.room.settings.excludedCanVote ? " та голосувати" : ""}.</div>}
+      {ability && (
+        <section className={`ability-panel ${state.you.abilityUsed ? "used" : ""}`}>
+          <div className="ability-heading">
+            <span><small>Активна картка · один раз за гру</small><strong>{ability.value}</strong></span>
+            <em>{state.you.abilityUsed ? "Використано" : "Готова"}</em>
+          </div>
+          <p>{ability.note}</p>
+          {!state.you.abilityUsed && (
+            <>
+              {(needsTarget || needsCategory) && (
+                <div className="ability-fields">
+                  {needsTarget && (
+                    <label>
+                      <span>Гравець</span>
+                      <select value={abilityTarget} onChange={(event) => setAbilityTarget(event.target.value)}>
+                        <option value="">Оберіть гравця</option>
+                        {activeTargets.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  {needsCategory && (
+                    <label>
+                      <span>Характеристика</span>
+                      <select value={abilityCategory} onChange={(event) => setAbilityCategory(event.target.value)}>
+                        {Object.entries(categoryNames).map(([category, label]) => <option key={category} value={category}>{label}</option>)}
+                      </select>
+                    </label>
+                  )}
+                </div>
+              )}
+              <button
+                className="ability-button"
+                disabled={busy || !abilityAvailable || (needsTarget && !abilityTarget)}
+                onClick={() => onUseAbility({ targetId: abilityTarget, category: abilityCategory })}
+              >
+                {votingAbility && !["voting", "runoff"].includes(state.room.phase) ? "Доступно під час голосування" : "Активувати картку"}
+              </button>
+            </>
+          )}
+        </section>
+      )}
       <div className="dossier-cards">
         {state.you.character.map((card, index) => {
           const revealed = state.you.revealed.includes(card.category);
@@ -421,18 +619,23 @@ function Dossier({
           return (
             <button
               key={card.category}
-              className={`dossier-card ${revealed ? "revealed" : ""} ${card.tone}`}
-              disabled={!yourTurn || revealed || lockedProfession || busy}
+              className={`dossier-card ${revealed ? "revealed" : ""} ${card.tone} ${card.category === "special" ? "active-special" : ""}`}
+              disabled={!yourTurn || revealed || lockedProfession || busy || revealedThisRound}
               onClick={() => onReveal(card.category)}
             >
               <span className="card-index">{String(index + 1).padStart(2, "0")}</span>
               <span className="card-copy"><small>{card.label}</small><strong>{card.value}</strong><em>{card.note}</em></span>
-              <i>{revealed ? "Відкрито" : yourTurn && !lockedProfession ? "Відкрити →" : "Закрито"}</i>
+              <i>{revealed ? "Відкрито групі" : yourTurn && !lockedProfession && !revealedThisRound ? "Відкрити групі →" : "Приватно"}</i>
             </button>
           );
         })}
       </div>
-      {yourTurn && <div className="your-turn-note"><span className="pulse-dot" />Ваш хід. Оберіть одну характеристику.</div>}
+      {yourTurn && (
+        <div className="your-turn-note">
+          <span className="pulse-dot" />
+          {revealedThisRound ? "Картку відкрито. Розкажіть про неї та натисніть «Передати хід» угорі." : "Ваш хід. Оберіть одну характеристику для відкриття."}
+        </div>
+      )}
     </aside>
   );
 }
@@ -469,12 +672,18 @@ function Game({
   busy,
   onReveal,
   onVote,
+  onPassTurn,
+  onAdvancePhase,
+  onUseAbility,
   onLeave,
 }: {
   state: GameState;
   busy: boolean;
   onReveal: (category: string) => void;
   onVote: (id: string) => void;
+  onPassTurn: () => void;
+  onAdvancePhase: () => void;
+  onUseAbility: (payload: Record<string, unknown>) => void;
   onLeave: () => void;
 }) {
   const [now, setNow] = useState(0);
@@ -491,8 +700,21 @@ function Game({
   const phase = phaseCopy[state.room.phase] ?? phaseCopy.briefing;
   const remaining = state.room.phaseEndsAt ? state.room.phaseEndsAt - now : 0;
   const turnPlayer = state.players.find((player) => player.seat === state.room.turnSeat);
+  const yourTurn = state.room.phase === "reveal" && turnPlayer?.isYou && state.you.active;
+  const revealedThisRound = state.you.revealed.length >= state.room.round;
+  const canSkipTurn = state.room.phase === "reveal" && state.you.canControlPhases && turnPlayer && !turnPlayer.isYou && !turnPlayer.isBot;
+  const manualPhaseLabel =
+    state.you.canControlPhases
+      ? state.room.phase === "briefing"
+        ? "Почати відкриття карток"
+        : state.room.phase === "discussion"
+          ? "Почати голосування"
+          : ["voting", "runoff"].includes(state.room.phase)
+            ? "Завершити голосування"
+            : ""
+      : "";
   return (
-    <main className="game-shell">
+    <main className={`game-shell phase-${state.room.phase}`}>
       <header className="game-header">
         <Logo />
         <div className="room-pill"><small>Кімната</small><strong>{state.room.code}</strong></div>
@@ -504,8 +726,16 @@ function Game({
       </header>
 
       <section className="phase-bar">
-        <div><small>{phase.eyebrow}</small><h1>{phase.title}</h1><p>{phase.hint}</p></div>
-        {state.room.phaseEndsAt && <div className={`timer ${remaining < 10_000 ? "urgent" : ""}`}><span>{formatSeconds(remaining)}</span><small>{turnPlayer ? `Хід: ${turnPlayer.name}` : "до наступної фази"}</small></div>}
+        <div className="phase-copy"><small>{phase.eyebrow}</small><h1>{phase.title}</h1><p>{phase.hint}</p></div>
+        <div className="phase-controls">
+          {(yourTurn && revealedThisRound) && <button className="pass-turn-button" disabled={busy} onClick={onPassTurn}>Передати хід →</button>}
+          {canSkipTurn && <button className="host-phase-button" disabled={busy} onClick={onPassTurn}>Пропустити хід: {turnPlayer.name}</button>}
+          {manualPhaseLabel && <button className="host-phase-button primary" disabled={busy} onClick={onAdvancePhase}>{manualPhaseLabel}</button>}
+          <div className={`timer ${state.room.phaseEndsAt && remaining < 10_000 ? "urgent" : ""} ${!state.room.phaseEndsAt ? "unlimited" : ""}`}>
+            <span>{state.room.phaseEndsAt ? formatSeconds(remaining) : "∞"}</span>
+            <small>{state.room.phaseEndsAt ? (turnPlayer ? `Хід: ${turnPlayer.name}` : "до наступної фази") : (turnPlayer ? `Говорить: ${turnPlayer.name}` : "без обмеження часу")}</small>
+          </div>
+        </div>
       </section>
 
       <div className="game-layout">
@@ -532,16 +762,11 @@ function Game({
         <section className="table-panel">
           {state.room.status === "finished" ? <Finished state={state} /> : (
             <>
-              {state.room.phase === "event" && state.room.currentEvent && (
-                <article className="event-banner">
-                  <div><small>{state.room.currentEvent.zone}</small><h2>{state.room.currentEvent.title}</h2></div>
-                  <p>{state.room.currentEvent.description}</p>
-                  <strong>{state.room.currentEvent.impact}</strong>
-                </article>
-              )}
-              <div className="table-heading">
+              <div className={`table-heading ${["voting", "runoff"].includes(state.room.phase) ? "voting-heading" : ""}`}>
                 <span><small>Кандидати</small><strong>{state.players.filter((player) => player.active).length} активних</strong></span>
-                {["voting", "runoff"].includes(state.room.phase) && <em>Ваш голос: {state.you.voteTarget ? "зафіксовано" : "очікується"}</em>}
+                {["voting", "runoff"].includes(state.room.phase) && (
+                  <em>{state.you.voteTarget ? "✓ Ваш голос зафіксовано" : "Оберіть кандидата нижче"}</em>
+                )}
               </div>
               <div className="player-grid">
                 {state.players.map((player) => <PlayerCard key={player.id} player={player} state={state} onVote={onVote} busy={busy} />)}
@@ -550,7 +775,7 @@ function Game({
           )}
         </section>
 
-        <Dossier state={state} busy={busy} onReveal={onReveal} />
+        <Dossier state={state} busy={busy} onReveal={onReveal} onUseAbility={onUseAbility} />
       </div>
     </main>
   );
@@ -647,7 +872,34 @@ export default function GameClient() {
     return <main className="loading-screen"><Logo /><div className="loader"><i /><span>Відновлюємо захищений канал…</span></div>{error && <><p>{error}</p><button className="secondary-button" onClick={leave}>Повернутися на старт</button></>}</main>;
   }
   if (state.room.status === "lobby") {
-    return <Lobby state={state} busy={busy} onReady={(ready) => void post({ action: "ready", ready }, true)} onLeave={leave} />;
+    return (
+      <>
+        <Lobby
+          state={state}
+          busy={busy}
+          onReady={(ready) => void post({ action: "ready", ready }, true)}
+          onAddBots={(count) => void post({ action: "addBots", count }, true)}
+          onRemoveBot={(botId) => void post({ action: "removeBot", botId }, true)}
+          onUpdateSettings={(settings) => void post({ action: "updateSettings", settings }, true)}
+          onLeave={leave}
+        />
+        {error && <div className="global-error-toast" role="alert">{error}</div>}
+      </>
+    );
   }
-  return <Game state={state} busy={busy} onReveal={(category) => void post({ action: "reveal", category }, true)} onVote={(targetId) => void post({ action: "vote", targetId }, true)} onLeave={leave} />;
+  return (
+    <>
+      <Game
+        state={state}
+        busy={busy}
+        onReveal={(category) => void post({ action: "reveal", category }, true)}
+        onVote={(targetId) => void post({ action: "vote", targetId }, true)}
+        onPassTurn={() => void post({ action: "passTurn" }, true)}
+        onAdvancePhase={() => void post({ action: "advancePhase" }, true)}
+        onUseAbility={(payload) => void post({ action: "useAbility", ...payload }, true)}
+        onLeave={leave}
+      />
+      {error && <div className="global-error-toast" role="alert">{error}</div>}
+    </>
+  );
 }
