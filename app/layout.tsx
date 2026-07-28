@@ -6,11 +6,15 @@ import "./globals.css";
 const manrope = Manrope({
   variable: "--font-manrope",
   subsets: ["cyrillic", "latin"],
+  display: "swap",
+  preload: true,
 });
 
 const oswald = Oswald({
   variable: "--font-oswald",
   subsets: ["cyrillic", "latin"],
+  display: "swap",
+  preload: true,
 });
 
 export async function generateMetadata(): Promise<Metadata> {

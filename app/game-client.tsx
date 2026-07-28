@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 type Session = { code: string; playerId: string; token: string };
 type Card = {
@@ -15,7 +15,7 @@ type Scenario = { title: string; description: string; facts: string[] };
 type RoomSettings = {
   minPlayers: number;
   maxPlayers: number;
-  seatsPercent: number;
+  seatsCount: number;
   revealSeconds: number;
   discussionSeconds: number;
   votingSeconds: number;
@@ -56,6 +56,7 @@ type GameState = {
     log: { at: number; kind: string; text: string }[];
     outcome: { score: number; title: string; summary: string; legacyReady: boolean; victoryRule: string } | null;
     votes: Record<string, string>;
+    voteCounts: Record<string, number>;
   };
   players: Player[];
   you: {
@@ -100,6 +101,70 @@ const categoryNames: Record<string, string> = {
   fact: "Факт",
   baggage: "Багаж",
 };
+const profileCategories = Object.entries(categoryNames);
+
+function InfoTooltip({ label, text }: { label: string; text: string }) {
+  const tooltipId = useId();
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [open]);
+  return (
+    <button
+      type="button"
+      className={`term-help ${open ? "open" : ""}`}
+      aria-label={`Пояснення терміна «${label}»`}
+      aria-describedby={tooltipId}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+      onClick={() => setOpen(true)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          setOpen(false);
+          event.currentTarget.blur();
+        }
+      }}
+    >
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="10" cy="10" r="7.5" />
+        <path d="M10 9.2v4.1M10 6.7h.01" />
+      </svg>
+      <span id={tooltipId} className="term-tooltip" role="tooltip">
+        <strong>{label}</strong>
+        {text}
+      </span>
+    </button>
+  );
+}
+
+function CharacteristicIcon({ category }: { category: string }) {
+  const common = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  return (
+    <svg className="profile-icon" viewBox="0 0 24 24" aria-hidden="true">
+      {category === "profession" && <><path {...common} d="M4 8.5h16v10H4zM9 8.5V6h6v2.5M4 12h16M10 12v2h4v-2" /></>}
+      {category === "health" && <><path {...common} d="M12 20S4.5 15.7 4.5 9.7A4.2 4.2 0 0 1 12 7.1a4.2 4.2 0 0 1 7.5 2.6C19.5 15.7 12 20 12 20Z" /><path {...common} d="M8 12h2.4l1.1-2.3 1.6 4.5 1-2.2H16" /></>}
+      {category === "biology" && <><path {...common} d="M8 4c0 4 8 4 8 8s-8 4-8 8M16 4c0 4-8 4-8 8s8 4 8 8M9 7h6M9 12h6M9 17h6" /></>}
+      {category === "phobia" && <><path {...common} d="M12 3 3.8 19h16.4L12 3Z" /><path {...common} d="M12 9v4.5M12 17h.01" /></>}
+      {category === "hobby" && <><path {...common} d="M7.5 8.5h9A4.5 4.5 0 0 1 21 13v2a2.5 2.5 0 0 1-4.5 1.5L15 14H9l-1.5 2.5A2.5 2.5 0 0 1 3 15v-2a4.5 4.5 0 0 1 4.5-4.5Z" /><path {...common} d="M7 11v4M5 13h4M16.5 12h.01M18.5 14h.01" /></>}
+      {category === "trait" && <><circle {...common} cx="12" cy="12" r="8" /><path {...common} d="M9 10h.01M15 10h.01M8.5 14.5c1 1 2.1 1.5 3.5 1.5s2.5-.5 3.5-1.5" /></>}
+      {category === "fact" && <><circle {...common} cx="12" cy="12" r="8" /><path {...common} d="M12 11v5M12 8h.01" /></>}
+      {category === "baggage" && <><path {...common} d="M5 8h14v11H5zM9 8V5h6v3M5 12h14M11 12v2h2v-2" /></>}
+    </svg>
+  );
+}
 
 function durationLabel(seconds: number) {
   if (seconds === 0) return "Без обмеження";
@@ -112,16 +177,29 @@ function formatSeconds(value: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function Logo() {
-  return (
-    <div className="brand" aria-label="Бункер: Протокол">
+function gameStateFingerprint(state: GameState) {
+  return JSON.stringify({
+    room: state.room,
+    players: state.players,
+    you: state.you,
+  });
+}
+
+function Logo({ onHome }: { onHome?: () => void }) {
+  const content = (
+    <>
       <span className="brand-mark"><i /></span>
       <span>
         <strong>Бункер</strong>
         <small>Протокол виживання</small>
       </span>
-    </div>
+    </>
   );
+  return onHome ? (
+    <button type="button" className="brand brand-home-button" aria-label="На головний екран" onClick={onHome}>
+      {content}
+    </button>
+  ) : <div className="brand" aria-label="Бункер: Протокол">{content}</div>;
 }
 
 function Toggle({
@@ -173,33 +251,46 @@ function Landing({
   busy,
   error,
   initialCode,
+  activeGame,
   onCreate,
   onJoin,
+  onResume,
 }: {
   busy: boolean;
   error: string;
   initialCode: string;
+  activeGame?: { code: string; status?: GameState["room"]["status"]; round?: number };
   onCreate: (payload: Record<string, unknown>) => void;
   onJoin: (payload: Record<string, unknown>) => void;
+  onResume: () => void;
 }) {
   const [tab, setTab] = useState<"create" | "join">(initialCode ? "join" : "create");
   const [name, setName] = useState("");
   const [code, setCode] = useState(initialCode);
   const [advanced, setAdvanced] = useState(false);
   const [settings, setSettings] = useState({
-    minPlayers: 4,
+    minPlayers: 8,
     maxPlayers: 8,
-    seatsPercent: 50,
+    seatsCount: 4,
     revealSeconds: 0,
     discussionSeconds: 0,
     votingSeconds: 0,
-    publicVotes: false,
+    publicVotes: true,
     excludedCanVote: false,
     victoryRule: "survival",
   });
 
   const update = (key: string, value: string | number | boolean) =>
     setSettings((current) => ({ ...current, [key]: value }));
+  const updatePlayerCount = (value: number) => {
+    const playerCount = Math.min(12, Math.max(4, value));
+    setSettings((current) => ({
+      ...current,
+      minPlayers: playerCount,
+      maxPlayers: playerCount,
+      seatsCount: Math.min(current.seatsCount, playerCount - 1),
+    }));
+  };
 
   return (
     <main className="landing-shell">
@@ -223,6 +314,15 @@ function Landing({
       </section>
 
       <section className="entry-panel" aria-label="Створити або приєднатися до гри">
+        {activeGame && (
+          <div className="resume-game-card">
+            <span>
+              <small>{activeGame.status === "lobby" ? "Активна кімната" : activeGame.status === "finished" ? "Завершена експедиція" : "Гра триває"}</small>
+              <strong>{activeGame.code}{activeGame.round ? ` · раунд ${String(activeGame.round).padStart(2, "0")}` : ""}</strong>
+            </span>
+            <button type="button" onClick={onResume}>Повернутися до гри →</button>
+          </div>
+        )}
         <div className="guest-badge"><span>✓</span> Гостьовий вхід без реєстрації</div>
         <div className="entry-tabs">
           <button className={tab === "create" ? "active" : ""} onClick={() => setTab("create")}>Нова кімната</button>
@@ -251,18 +351,14 @@ function Landing({
           <>
             <div className="compact-settings">
               <label>
-                <span>Гравців</span>
-                <select value={settings.maxPlayers} onChange={(event) => update("maxPlayers", Number(event.target.value))}>
-                  {[6, 8, 10, 12].map((value) => <option key={value} value={value}>до {value}</option>)}
-                </select>
+                <span>Учасників у грі</span>
+                <input type="number" min={4} max={12} step={1} inputMode="numeric" value={settings.maxPlayers} onChange={(event) => updatePlayerCount(Number(event.target.value))} />
+                <small>Від 4 до 12</small>
               </label>
               <label>
-                <span>Місць у бункері</span>
-                <select value={settings.seatsPercent} onChange={(event) => update("seatsPercent", Number(event.target.value))}>
-                  <option value={40}>40%</option>
-                  <option value={50}>50%</option>
-                  <option value={60}>60%</option>
-                </select>
+                <span>Залишаться в бункері</span>
+                <input type="number" min={2} max={settings.maxPlayers - 1} step={1} inputMode="numeric" value={settings.seatsCount} onChange={(event) => update("seatsCount", Math.min(settings.maxPlayers - 1, Math.max(2, Number(event.target.value))))} />
+                <small>Від 2 до {settings.maxPlayers - 1}</small>
               </label>
             </div>
             <button className="advanced-button" onClick={() => setAdvanced((value) => !value)}>
@@ -277,7 +373,7 @@ function Landing({
                 <TimeSelect label="Хід і розповідь" description="Час на картку та аргументи" value={settings.revealSeconds} options={timeOptions.reveal} onChange={(value) => update("revealSeconds", value)} />
                 <TimeSelect label="Загальна дискусія" description="Обговорення після кола" value={settings.discussionSeconds} options={timeOptions.discussion} onChange={(value) => update("discussionSeconds", value)} />
                 <TimeSelect label="Голосування" description="Час на фінальний вибір" value={settings.votingSeconds} options={timeOptions.voting} onChange={(value) => update("votingSeconds", value)} />
-                <Toggle checked={settings.publicVotes} onChange={(value) => update("publicVotes", value)} label="Відкрите голосування" description="Показувати вибір одразу" />
+                <Toggle checked={settings.publicVotes} onChange={(value) => update("publicVotes", value)} label="Відкрите голосування" description="Показувати кількість голосів на картках" />
                 <Toggle checked={settings.excludedCanVote} onChange={(value) => update("excludedCanVote", value)} label="Голос вигнаних" description="Виключені зберігають вплив" />
                 <label className="select-row">
                   <span><strong>Умови перемоги</strong><small>Що враховує фінальний аналіз</small></span>
@@ -295,7 +391,7 @@ function Landing({
         <button
           className="primary-button"
           disabled={busy || (tab === "join" && code.length !== 6)}
-          onClick={() => tab === "create" ? onCreate({ name, settings: { ...settings, minPlayers: 4 } }) : onJoin({ name, code })}
+          onClick={() => tab === "create" ? onCreate({ name, settings }) : onJoin({ name, code })}
         >
           {busy ? "Встановлюємо зв’язок…" : tab === "create" ? "Увійти гостем і створити гру" : "Увійти гостем до кімнати"}
           <span>→</span>
@@ -314,6 +410,7 @@ function Lobby({
   onAddBots,
   onRemoveBot,
   onUpdateSettings,
+  onHome,
   onLeave,
 }: {
   state: GameState;
@@ -322,6 +419,7 @@ function Lobby({
   onAddBots: (count: number) => void;
   onRemoveBot: (botId: string) => void;
   onUpdateSettings: (settings: RoomSettings) => void;
+  onHome: () => void;
   onLeave: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -333,6 +431,15 @@ function Lobby({
   const settingsChanged = JSON.stringify(draft) !== JSON.stringify(state.room.settings);
   const updateDraft = <K extends keyof RoomSettings>(key: K, value: RoomSettings[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
+  const updateDraftPlayerCount = (value: number) => {
+    const playerCount = Math.min(12, Math.max(4, value));
+    setDraft((current) => ({
+      ...current,
+      minPlayers: playerCount,
+      maxPlayers: playerCount,
+      seatsCount: Math.min(current.seatsCount, playerCount - 1),
+    }));
+  };
   const copyInvite = async () => {
     const url = new URL(window.location.href);
     url.searchParams.set("room", state.room.code);
@@ -343,7 +450,7 @@ function Lobby({
   return (
     <main className="lobby-shell">
       <header className="game-header">
-        <Logo />
+        <Logo onHome={onHome} />
         <button className="quiet-button" onClick={onLeave}>Вийти</button>
       </header>
       <section className="lobby-intro">
@@ -414,16 +521,14 @@ function Lobby({
               </button>
               <div className="lobby-setting-grid">
                 <label className="compact-control">
-                  <span>Максимум гравців</span>
-                  <select value={draft.maxPlayers} onChange={(event) => updateDraft("maxPlayers", Number(event.target.value))}>
-                    {Array.from({ length: 9 }, (_, index) => index + 4).map((value) => <option key={value} value={value}>{value}</option>)}
-                  </select>
+                  <span>Учасників у грі</span>
+                  <input type="number" min={4} max={12} step={1} inputMode="numeric" value={draft.maxPlayers} onChange={(event) => updateDraftPlayerCount(Number(event.target.value))} />
+                  <small>Точна кількість: 4–12</small>
                 </label>
                 <label className="compact-control">
-                  <span>Місць у бункері</span>
-                  <select value={draft.seatsPercent} onChange={(event) => updateDraft("seatsPercent", Number(event.target.value))}>
-                    <option value={40}>40%</option><option value={50}>50%</option><option value={60}>60%</option>
-                  </select>
+                  <span>Залишаться в бункері</span>
+                  <input type="number" min={2} max={draft.maxPlayers - 1} step={1} inputMode="numeric" value={draft.seatsCount} onChange={(event) => updateDraft("seatsCount", Math.min(draft.maxPlayers - 1, Math.max(2, Number(event.target.value))))} />
+                  <small>Точна кількість: 2–{draft.maxPlayers - 1}</small>
                 </label>
               </div>
               <TimeSelect label="Хід і розповідь" description="Після відкриття гравець говорить і натискає «Передати хід»" value={draft.revealSeconds} options={timeOptions.reveal} onChange={(value) => updateDraft("revealSeconds", value)} />
@@ -444,8 +549,8 @@ function Lobby({
             </div>
           ) : (
             <dl className="settings-summary">
-              <div><dt>Гравців</dt><dd>до {state.room.settings.maxPlayers}</dd></div>
-              <div><dt>Місць у сховищі</dt><dd>{state.room.settings.seatsPercent}%</dd></div>
+              <div><dt>Учасників у грі</dt><dd>{state.room.settings.maxPlayers}</dd></div>
+              <div><dt>Місць у сховищі</dt><dd>{state.room.settings.seatsCount}</dd></div>
               <div><dt>Хід і розповідь</dt><dd>{durationLabel(state.room.settings.revealSeconds)}</dd></div>
               <div><dt>Дискусія</dt><dd>{durationLabel(state.room.settings.discussionSeconds)}</dd></div>
               <div><dt>Голосування</dt><dd>{durationLabel(state.room.settings.votingSeconds)}</dd></div>
@@ -455,10 +560,10 @@ function Lobby({
           <div className="rules-explainer">
             <strong>Як проходить гра</strong>
             <ol>
-              <li><b>Відкрийте картку.</b> У першому колі всі починають із професії.</li>
+              <li><b>Відкрийте картку.</b> Уже в першому колі кожен сам обирає характеристику.</li>
               <li><b>Розкажіть про себе.</b> Без таймера можна говорити скільки потрібно.</li>
               <li><b>Передайте хід.</b> Наступний гравець відкриє свою характеристику.</li>
-              <li><b>Обговоріть і голосуйте.</b> Після кола група виключає одного кандидата.</li>
+              <li><b>Обговоріть.</b> Перше коло минає без голосування, далі група виключає по одному кандидату.</li>
               <li><b>Активуйте особливі картки.</b> Вони змінюють досьє, обмінюють характеристики або впливають на голоси.</li>
             </ol>
             <p>Випадкових подій між раундами більше немає — у центрі гри люди, аргументи й активні картки.</p>
@@ -466,7 +571,7 @@ function Lobby({
         </aside>
       </div>
       <div className="ready-dock">
-        <span>{state.you.ready ? "Ви готові. Очікуємо решту групи." : `Для старту потрібно щонайменше ${state.room.settings.minPlayers} гравці та готовність усіх.`}</span>
+        <span>{state.you.ready ? "Ви готові. Очікуємо решту групи." : `Для старту зберіть ${state.room.settings.minPlayers} учасників і підтвердьте готовність усіх.`}</span>
         <button className={state.you.ready ? "secondary-button" : "primary-button"} disabled={busy} onClick={() => onReady(!state.you.ready)}>
           {state.you.ready ? "Скасувати готовність" : "Я готовий"}
         </button>
@@ -475,10 +580,20 @@ function Lobby({
   );
 }
 
-function ScenarioCard({ number, label, scenario }: { number: string; label: string; scenario: Scenario | null }) {
+function ScenarioCard({
+  number,
+  label,
+  scenario,
+  variant,
+}: {
+  number: string;
+  label: string;
+  scenario: Scenario | null;
+  variant: "catastrophe" | "bunker" | "outside";
+}) {
   if (!scenario) return null;
   return (
-    <article className="scenario-card">
+    <article className={`scenario-card scenario-${variant}`}>
       <div className="scenario-number">{number}</div>
       <div className="scenario-body">
         <small>{label}</small>
@@ -493,23 +608,33 @@ function ScenarioCard({ number, label, scenario }: { number: string; label: stri
 function PlayerCard({
   player,
   state,
+  onReveal,
   onVote,
   busy,
 }: {
   player: Player;
   state: GameState;
+  onReveal: (category: string) => void;
   onVote: (id: string) => void;
   busy: boolean;
 }) {
   const canVote =
     ["voting", "runoff"].includes(state.room.phase) &&
     (state.you.active || state.room.settings.excludedCanVote) &&
+    !state.you.voteTarget &&
     player.active &&
     !player.isYou &&
     (state.room.phase !== "runoff" || state.room.runoff.includes(player.id));
   const selected = state.you.voteTarget === player.id;
   const isTurn = state.room.phase === "reveal" && state.room.turnSeat === player.seat;
-  const publicVoteCount = Object.values(state.room.votes).filter((targetId) => targetId === player.id).length;
+  const revealedThisRound = state.you.revealed.length >= state.room.round;
+  const privateCards = player.isYou ? state.you.character : player.character ?? [];
+  const publicVoteCount = state.room.voteCounts[player.id] ?? 0;
+  const showVoteCount =
+    state.room.settings.publicVotes &&
+    ["voting", "runoff"].includes(state.room.phase) &&
+    player.active &&
+    (state.room.phase !== "runoff" || state.room.runoff.includes(player.id));
   return (
     <article className={`player-card ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}>
       <div className="player-topline">
@@ -522,11 +647,46 @@ function PlayerCard({
         {player.doubleVote && <span className="effect-double">Голос ×2</span>}
         {player.hasVoted && ["voting", "runoff"].includes(state.room.phase) && <span className="effect-voted">Проголосував</span>}
       </div>
-      <div className="revealed-list">
-        {player.revealed.length ? player.revealed.map((card) => (
-          <div key={card.category}><span>{card.label}</span><b>{card.value}</b></div>
-        )) : <p>Досьє ще закрите</p>}
+      <div className="player-profile-list">
+        {profileCategories.map(([category, label]) => {
+          const publicCard = player.revealed.find((card) => card.category === category);
+          const privateCard = privateCards.find((card) => card.category === category);
+          const card = privateCard ?? publicCard;
+          const known = player.isYou || state.room.status === "finished" || Boolean(publicCard);
+          const canReveal =
+            player.isYou &&
+            isTurn &&
+            state.you.active &&
+            !revealedThisRound &&
+            !publicCard &&
+            Boolean(privateCard);
+          return (
+            <div key={category} className={`profile-row ${known ? "known" : "hidden"} ${publicCard ? "public" : ""} ${canReveal ? "can-reveal" : ""}`}>
+              <span className="profile-label"><CharacteristicIcon category={category} />{label}</span>
+              {known && card?.note
+                ? <InfoTooltip label={card.value} text={card.note} />
+                : <span className="term-help-placeholder" aria-hidden="true" />}
+              <span className="profile-value">
+                <b>{known ? card?.value ?? "—" : "?"}</b>
+              </span>
+              {canReveal && (
+                <button type="button" className="profile-reveal-button" disabled={busy} onClick={() => onReveal(category)}>Відкрити →</button>
+              )}
+            </div>
+          );
+        })}
       </div>
+      {player.isYou && isTurn && (
+        <div className="player-reveal-note">
+          {revealedThisRound ? "Характеристику відкрито — передайте хід угорі." : "Ваш хід: оберіть характеристику зі списку."}
+        </div>
+      )}
+      {showVoteCount && (
+        <div className="player-vote-tally" aria-label={`${player.name}: отримано голосів — ${publicVoteCount}`}>
+          <span>Отримано голосів</span>
+          <strong>{publicVoteCount}</strong>
+        </div>
+      )}
       {!player.active && <div className="excluded-stamp">Поза бункером</div>}
       {isTurn && <div className="turn-badge">Зараз говорить</div>}
       {canVote && (
@@ -534,26 +694,21 @@ function PlayerCard({
           {selected ? "✓ Ваш голос за цього гравця" : "Віддати голос"}
         </button>
       )}
-      {state.room.settings.publicVotes && publicVoteCount > 0 && <span className="public-vote">{publicVoteCount} {publicVoteCount === 1 ? "голос" : "голоси"}</span>}
     </article>
   );
 }
 
-function Dossier({
+function AbilityControls({
   state,
   busy,
-  onReveal,
   onUseAbility,
 }: {
   state: GameState;
   busy: boolean;
-  onReveal: (category: string) => void;
   onUseAbility: (payload: Record<string, unknown>) => void;
 }) {
   const [abilityTarget, setAbilityTarget] = useState("");
   const [abilityCategory, setAbilityCategory] = useState("health");
-  const yourTurn = state.room.phase === "reveal" && state.room.turnSeat === state.you.seat && state.you.active;
-  const revealedThisRound = state.you.revealed.length >= state.room.round;
   const ability = state.you.character.find((card) => card.category === "special");
   const needsTarget = ["swap", "expose", "scramble"].includes(ability?.action ?? "");
   const needsCategory = ["reroll_self", "swap", "expose", "scramble"].includes(ability?.action ?? "");
@@ -564,79 +719,48 @@ function Dossier({
     !state.you.abilityUsed &&
     (!votingAbility || ["voting", "runoff"].includes(state.room.phase));
   const activeTargets = state.players.filter((player) => player.active && !player.isYou);
+  if (!ability) return null;
   return (
-    <aside className="dossier-panel">
-      <div className="dossier-header">
-        <span><small>Приватно</small><strong>Ваше досьє</strong></span>
-        <em>{state.you.revealed.length} / {state.you.character.length}</em>
+    <section className={`ability-panel table-ability ${state.you.abilityUsed ? "used" : ""}`}>
+      <div className="ability-heading">
+        <span><small>Ваша активна картка · один раз за гру</small><strong>{ability.value}</strong></span>
+        <em>{state.you.abilityUsed ? "Використано" : "Готова"}</em>
       </div>
+      <p>{ability.note}</p>
       {!state.you.active && <div className="spectator-note">Ви поза основним сховищем, але можете стежити за рішенням групи{state.room.settings.excludedCanVote ? " та голосувати" : ""}.</div>}
-      {ability && (
-        <section className={`ability-panel ${state.you.abilityUsed ? "used" : ""}`}>
-          <div className="ability-heading">
-            <span><small>Активна картка · один раз за гру</small><strong>{ability.value}</strong></span>
-            <em>{state.you.abilityUsed ? "Використано" : "Готова"}</em>
-          </div>
-          <p>{ability.note}</p>
-          {!state.you.abilityUsed && (
-            <>
-              {(needsTarget || needsCategory) && (
-                <div className="ability-fields">
-                  {needsTarget && (
-                    <label>
-                      <span>Гравець</span>
-                      <select value={abilityTarget} onChange={(event) => setAbilityTarget(event.target.value)}>
-                        <option value="">Оберіть гравця</option>
-                        {activeTargets.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
-                      </select>
-                    </label>
-                  )}
-                  {needsCategory && (
-                    <label>
-                      <span>Характеристика</span>
-                      <select value={abilityCategory} onChange={(event) => setAbilityCategory(event.target.value)}>
-                        {Object.entries(categoryNames).map(([category, label]) => <option key={category} value={category}>{label}</option>)}
-                      </select>
-                    </label>
-                  )}
-                </div>
+      {!state.you.abilityUsed && (
+        <div className="ability-action-row">
+          {(needsTarget || needsCategory) && (
+            <div className="ability-fields">
+              {needsTarget && (
+                <label>
+                  <span>Гравець</span>
+                  <select value={abilityTarget} onChange={(event) => setAbilityTarget(event.target.value)}>
+                    <option value="">Оберіть гравця</option>
+                    {activeTargets.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
+                  </select>
+                </label>
               )}
-              <button
-                className="ability-button"
-                disabled={busy || !abilityAvailable || (needsTarget && !abilityTarget)}
-                onClick={() => onUseAbility({ targetId: abilityTarget, category: abilityCategory })}
-              >
-                {votingAbility && !["voting", "runoff"].includes(state.room.phase) ? "Доступно під час голосування" : "Активувати картку"}
-              </button>
-            </>
+              {needsCategory && (
+                <label>
+                  <span>Характеристика</span>
+                  <select value={abilityCategory} onChange={(event) => setAbilityCategory(event.target.value)}>
+                    {profileCategories.map(([category, label]) => <option key={category} value={category}>{label}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
           )}
-        </section>
-      )}
-      <div className="dossier-cards">
-        {state.you.character.map((card, index) => {
-          const revealed = state.you.revealed.includes(card.category);
-          const lockedProfession = state.room.round === 1 && card.category !== "profession";
-          return (
-            <button
-              key={card.category}
-              className={`dossier-card ${revealed ? "revealed" : ""} ${card.tone} ${card.category === "special" ? "active-special" : ""}`}
-              disabled={!yourTurn || revealed || lockedProfession || busy || revealedThisRound}
-              onClick={() => onReveal(card.category)}
-            >
-              <span className="card-index">{String(index + 1).padStart(2, "0")}</span>
-              <span className="card-copy"><small>{card.label}</small><strong>{card.value}</strong><em>{card.note}</em></span>
-              <i>{revealed ? "Відкрито групі" : yourTurn && !lockedProfession && !revealedThisRound ? "Відкрити групі →" : "Приватно"}</i>
-            </button>
-          );
-        })}
-      </div>
-      {yourTurn && (
-        <div className="your-turn-note">
-          <span className="pulse-dot" />
-          {revealedThisRound ? "Картку відкрито. Розкажіть про неї та натисніть «Передати хід» угорі." : "Ваш хід. Оберіть одну характеристику для відкриття."}
+          <button
+            className="ability-button"
+            disabled={busy || !abilityAvailable || (needsTarget && !abilityTarget)}
+            onClick={() => onUseAbility({ targetId: abilityTarget, category: abilityCategory })}
+          >
+            {votingAbility && !["voting", "runoff"].includes(state.room.phase) ? "Доступно під час голосування" : "Активувати картку"}
+          </button>
         </div>
       )}
-    </aside>
+    </section>
   );
 }
 
@@ -667,6 +791,22 @@ function Finished({ state }: { state: GameState }) {
   );
 }
 
+function RoundTimer({ phaseEndsAt }: { phaseEndsAt: number | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!phaseEndsAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [phaseEndsAt]);
+  const remaining = phaseEndsAt ? phaseEndsAt - now : 0;
+  return (
+    <div className={`timer compact-timer ${phaseEndsAt && remaining < 10_000 ? "urgent" : ""} ${!phaseEndsAt ? "unlimited" : ""}`}>
+      <span>{phaseEndsAt ? formatSeconds(remaining) : "∞"}</span>
+      <small>{phaseEndsAt ? "до наступної дії" : "без обмеження"}</small>
+    </div>
+  );
+}
+
 function Game({
   state,
   busy,
@@ -675,6 +815,7 @@ function Game({
   onPassTurn,
   onAdvancePhase,
   onUseAbility,
+  onHome,
   onLeave,
 }: {
   state: GameState;
@@ -684,21 +825,23 @@ function Game({
   onPassTurn: () => void;
   onAdvancePhase: () => void;
   onUseAbility: (payload: Record<string, unknown>) => void;
+  onHome: () => void;
   onLeave: () => void;
 }) {
-  const [now, setNow] = useState(0);
-  const [scenarioTab, setScenarioTab] = useState<"scenario" | "log">("scenario");
-  useEffect(() => {
-    const update = () => setNow(Date.now());
-    const kickoff = window.setTimeout(update, 0);
-    const timer = window.setInterval(update, 250);
-    return () => {
-      window.clearTimeout(kickoff);
-      window.clearInterval(timer);
-    };
-  }, []);
-  const phase = phaseCopy[state.room.phase] ?? phaseCopy.briefing;
-  const remaining = state.room.phaseEndsAt ? state.room.phaseEndsAt - now : 0;
+  const phase =
+    state.room.round === 1 && state.room.phase === "discussion"
+      ? {
+          eyebrow: "Перше коло",
+          title: "Обговорення без голосування",
+          hint: "Після дискусії гра одразу перейде до другого раунду — у першому колі ніхто не вибуває.",
+        }
+      : state.room.phase === "voting" && state.room.settings.publicVotes
+        ? {
+            ...phaseCopy.voting,
+            title: "Відкрите голосування",
+            hint: "Оберіть кандидата. Кількість отриманих голосів оновлюється на картках у реальному часі.",
+          }
+      : phaseCopy[state.room.phase] ?? phaseCopy.briefing;
   const turnPlayer = state.players.find((player) => player.seat === state.room.turnSeat);
   const yourTurn = state.room.phase === "reveal" && turnPlayer?.isYou && state.you.active;
   const revealedThisRound = state.you.revealed.length >= state.room.round;
@@ -708,15 +851,21 @@ function Game({
       ? state.room.phase === "briefing"
         ? "Почати відкриття карток"
         : state.room.phase === "discussion"
-          ? "Почати голосування"
+          ? state.room.round === 1
+            ? "Перейти до другого раунду"
+            : "Почати голосування"
           : ["voting", "runoff"].includes(state.room.phase)
             ? "Завершити голосування"
             : ""
       : "";
+  const eligibleVoters = state.room.settings.excludedCanVote
+    ? state.players
+    : state.players.filter((player) => player.active);
+  const votesCast = eligibleVoters.filter((player) => player.hasVoted).length;
   return (
     <main className={`game-shell phase-${state.room.phase}`}>
       <header className="game-header">
-        <Logo />
+        <Logo onHome={onHome} />
         <div className="room-pill"><small>Кімната</small><strong>{state.room.code}</strong></div>
         <div className="game-meta">
           <span><small>Раунд</small><strong>{String(state.room.round).padStart(2, "0")}</strong></span>
@@ -727,55 +876,49 @@ function Game({
 
       <section className="phase-bar">
         <div className="phase-copy"><small>{phase.eyebrow}</small><h1>{phase.title}</h1><p>{phase.hint}</p></div>
-        <div className="phase-controls">
-          {(yourTurn && revealedThisRound) && <button className="pass-turn-button" disabled={busy} onClick={onPassTurn}>Передати хід →</button>}
-          {canSkipTurn && <button className="host-phase-button" disabled={busy} onClick={onPassTurn}>Пропустити хід: {turnPlayer.name}</button>}
-          {manualPhaseLabel && <button className="host-phase-button primary" disabled={busy} onClick={onAdvancePhase}>{manualPhaseLabel}</button>}
-          <div className={`timer ${state.room.phaseEndsAt && remaining < 10_000 ? "urgent" : ""} ${!state.room.phaseEndsAt ? "unlimited" : ""}`}>
-            <span>{state.room.phaseEndsAt ? formatSeconds(remaining) : "∞"}</span>
-            <small>{state.room.phaseEndsAt ? (turnPlayer ? `Хід: ${turnPlayer.name}` : "до наступної фази") : (turnPlayer ? `Говорить: ${turnPlayer.name}` : "без обмеження часу")}</small>
-          </div>
-        </div>
       </section>
 
       <div className="game-layout">
-        <aside className="scenario-panel">
-          <div className="mini-tabs">
-            <button className={scenarioTab === "scenario" ? "active" : ""} onClick={() => setScenarioTab("scenario")}>Умови</button>
-            <button className={scenarioTab === "log" ? "active" : ""} onClick={() => setScenarioTab("log")}>Журнал</button>
-          </div>
-          {scenarioTab === "scenario" ? (
-            <div className="scenario-stack">
-              <ScenarioCard number="01" label="Катастрофа" scenario={state.room.catastrophe} />
-              <ScenarioCard number="02" label="Сховище" scenario={state.room.bunker} />
-              <ScenarioCard number="03" label="Поверхня" scenario={state.room.outside} />
-            </div>
-          ) : (
-            <div className="event-log">
-              {[...state.room.log].reverse().map((entry, index) => (
-                <div key={`${entry.at}-${index}`}><span>{new Date(entry.at).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</span><p>{entry.text}</p></div>
-              ))}
-            </div>
-          )}
-        </aside>
-
         <section className="table-panel">
           {state.room.status === "finished" ? <Finished state={state} /> : (
             <>
+              <section className="scenario-strip" aria-label="Умови виживання">
+                <div className="scenario-strip-heading"><small>Умови виживання</small><strong>Катастрофа · бункер · поверхня</strong></div>
+                <div className="scenario-stack">
+                  <ScenarioCard number="01" label="Катастрофа" scenario={state.room.catastrophe} variant="catastrophe" />
+                  <ScenarioCard number="02" label="Бункер" scenario={state.room.bunker} variant="bunker" />
+                  <ScenarioCard number="03" label="Стан поверхні" scenario={state.room.outside} variant="outside" />
+                </div>
+              </section>
+              <section className="round-control-dock" aria-label="Керування раундом">
+                <div className="round-control-status">
+                  <span className="control-round">Раунд {String(state.room.round).padStart(2, "0")}</span>
+                  <strong>{turnPlayer ? `${turnPlayer.isYou ? "Ваш хід" : `Хід: ${turnPlayer.name}`}` : phase.title}</strong>
+                  <small>{yourTurn && !revealedThisRound ? "Оберіть характеристику у своїй картці" : phase.hint}</small>
+                </div>
+                <div className="round-control-actions">
+                  {(yourTurn && revealedThisRound) && <button className="pass-turn-button" disabled={busy} onClick={onPassTurn}>Передати хід →</button>}
+                  {canSkipTurn && <button className="host-phase-button" disabled={busy} onClick={onPassTurn}>Пропустити хід: {turnPlayer.name}</button>}
+                  {manualPhaseLabel && <button className="host-phase-button primary" disabled={busy} onClick={onAdvancePhase}>{manualPhaseLabel}</button>}
+                  <RoundTimer phaseEndsAt={state.room.phaseEndsAt} />
+                </div>
+              </section>
+              <AbilityControls state={state} busy={busy} onUseAbility={onUseAbility} />
               <div className={`table-heading ${["voting", "runoff"].includes(state.room.phase) ? "voting-heading" : ""}`}>
                 <span><small>Кандидати</small><strong>{state.players.filter((player) => player.active).length} активних</strong></span>
                 {["voting", "runoff"].includes(state.room.phase) && (
-                  <em>{state.you.voteTarget ? "✓ Ваш голос зафіксовано" : "Оберіть кандидата нижче"}</em>
+                  <em>
+                    {state.you.voteTarget ? "✓ Ваш голос зафіксовано" : "Оберіть кандидата нижче"}
+                    {" · "}Проголосували {votesCast}/{eligibleVoters.length}
+                  </em>
                 )}
               </div>
               <div className="player-grid">
-                {state.players.map((player) => <PlayerCard key={player.id} player={player} state={state} onVote={onVote} busy={busy} />)}
+                {state.players.map((player) => <PlayerCard key={player.id} player={player} state={state} onReveal={onReveal} onVote={onVote} busy={busy} />)}
               </div>
             </>
           )}
         </section>
-
-        <Dossier state={state} busy={busy} onReveal={onReveal} onUseAbility={onUseAbility} />
       </div>
     </main>
   );
@@ -784,6 +927,7 @@ function Game({
 export default function GameClient() {
   const [session, setSession] = useState<Session | null>(null);
   const [state, setState] = useState<GameState | null>(null);
+  const [showHome, setShowHome] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const initialCode = useMemo(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("room")?.toUpperCase() ?? "", []);
@@ -800,7 +944,10 @@ export default function GameClient() {
       const response = await fetch(`/api/game?${query}`, { cache: "no-store" });
       const data = await response.json() as { state?: GameState; error?: string };
       if (!response.ok) throw new Error(data.error || "Не вдалося оновити стан.");
-      if (data.state) setState(data.state);
+      if (data.state) {
+        const nextState = data.state;
+        setState((current) => current && gameStateFingerprint(current) === gameStateFingerprint(nextState) ? current : nextState);
+      }
       setError("");
     } catch (reason) {
       if (!quiet) setError(reason instanceof Error ? reason.message : "Немає зв’язку із сервером.");
@@ -827,11 +974,28 @@ export default function GameClient() {
 
   useEffect(() => {
     if (!session) return;
-    const kickoff = window.setTimeout(() => void loadState(session), 0);
-    const timer = window.setInterval(() => void loadState(session, true), 1400);
+    let requestInFlight = false;
+    const refresh = async (quiet: boolean) => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        await loadState(session, quiet);
+      } finally {
+        requestInFlight = false;
+      }
+    };
+    const kickoff = window.setTimeout(() => void refresh(false), 0);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh(true);
+    }, 1600);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void refresh(true);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       window.clearTimeout(kickoff);
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [session, loadState]);
 
@@ -848,6 +1012,7 @@ export default function GameClient() {
       if (!response.ok) throw new Error(data.error || "Дія не виконана.");
       if (data.session) {
         saveSession(data.session);
+        setShowHome(false);
         await loadState(data.session);
       }
       if (data.state) setState(data.state);
@@ -862,14 +1027,25 @@ export default function GameClient() {
     saveSession(null);
     setState(null);
     setError("");
+    setShowHome(true);
     window.history.replaceState({}, "", window.location.pathname);
   };
 
-  if (!session) {
-    return <Landing busy={busy} error={error} initialCode={initialCode} onCreate={(payload) => void post({ action: "create", ...payload })} onJoin={(payload) => void post({ action: "join", ...payload })} />;
+  if (!session || showHome) {
+    return (
+      <Landing
+        busy={busy}
+        error={error}
+        initialCode={initialCode}
+        activeGame={session ? { code: session.code, status: state?.room.status, round: state?.room.round } : undefined}
+        onCreate={(payload) => void post({ action: "create", ...payload })}
+        onJoin={(payload) => void post({ action: "join", ...payload })}
+        onResume={() => setShowHome(false)}
+      />
+    );
   }
   if (!state) {
-    return <main className="loading-screen"><Logo /><div className="loader"><i /><span>Відновлюємо захищений канал…</span></div>{error && <><p>{error}</p><button className="secondary-button" onClick={leave}>Повернутися на старт</button></>}</main>;
+    return <main className="loading-screen"><Logo onHome={() => setShowHome(true)} /><div className="loader"><i /><span>Відновлюємо захищений канал…</span></div>{error && <><p>{error}</p><button className="secondary-button" onClick={leave}>Повернутися на старт</button></>}</main>;
   }
   if (state.room.status === "lobby") {
     return (
@@ -881,6 +1057,7 @@ export default function GameClient() {
           onAddBots={(count) => void post({ action: "addBots", count }, true)}
           onRemoveBot={(botId) => void post({ action: "removeBot", botId }, true)}
           onUpdateSettings={(settings) => void post({ action: "updateSettings", settings }, true)}
+          onHome={() => setShowHome(true)}
           onLeave={leave}
         />
         {error && <div className="global-error-toast" role="alert">{error}</div>}
@@ -897,6 +1074,7 @@ export default function GameClient() {
         onPassTurn={() => void post({ action: "passTurn" }, true)}
         onAdvancePhase={() => void post({ action: "advancePhase" }, true)}
         onUseAbility={(payload) => void post({ action: "useAbility", ...payload }, true)}
+        onHome={() => setShowHome(true)}
         onLeave={leave}
       />
       {error && <div className="global-error-toast" role="alert">{error}</div>}
