@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
-import { access, readFile, readdir } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
-
-const developmentPreviewMeta =
-  /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
-const templateRoot = new URL("../", import.meta.url);
-const previewRoot = new URL("../app/_sites-preview/", import.meta.url);
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -28,64 +23,108 @@ async function render() {
   );
 }
 
-test("server-renders the starter loading skeleton", async () => {
+test("renders the guest entry screen", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, developmentPreviewMeta);
-  assert.match(html, /<title>Your site is taking shape<\/title>/i);
-  assert.match(html, /Building your site/);
-  assert.match(html, /Your site is taking shape/);
-  assert.match(
-    html,
-    /Your first version will appear here automatically when it’s ready\./,
-  );
-  assert.doesNotMatch(html, /Codex/);
-  assert.match(html, /react-loading-skeleton/);
-  assert.match(html, /role="status"/);
+  assert.match(html, /Бункер: Протокол/);
+  assert.match(html, /Гостьовий вхід без реєстрації/);
+  assert.match(html, /Увійти гостем і створити гру/);
+  assert.match(html, /Жодних акаунтів чи паролів/);
+  assert.doesNotMatch(html, /codex-preview/);
 });
 
-test("keeps the loading skeleton scoped and disposable", async () => {
-  const [preview, css, page, layout, packageJson, files] = await Promise.all([
-    readFile(new URL("SkeletonPreview.tsx", previewRoot), "utf8"),
-    readFile(new URL("preview.css", previewRoot), "utf8"),
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../package.json", import.meta.url), "utf8"),
-    readdir(previewRoot),
+test("keeps bot play and one-click controls wired", async () => {
+  const [api, client, data, css, startFile, stopFile, startStats, stopStats] = await Promise.all([
+    readFile(new URL("../worker/game-api.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../worker/game-data.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../Запустити Бункер.command", import.meta.url), "utf8"),
+    readFile(new URL("../Зупинити Бункер.command", import.meta.url), "utf8"),
+    stat(new URL("../Запустити Бункер.command", import.meta.url)),
+    stat(new URL("../Зупинити Бункер.command", import.meta.url)),
   ]);
 
-  assert.deepEqual(files.sort(), ["SkeletonPreview.tsx", "preview.css"]);
-  assert.match(preview, /from "react-loading-skeleton"/);
-  assert.match(preview, /baseColor="#eceae7"/);
-  assert.match(preview, /highlightColor="#f9f8f6"/);
-  assert.match(preview, /duration=\{2\.8\}/);
-  assert.match(preview, /sites-skeleton-search-placeholder/);
-  assert.match(packageJson, /"react-loading-skeleton": "3\.5\.0"/);
-
-  const shellIndex = preview.indexOf('className="sites-skeleton-shell"');
-  const statusIndex = preview.indexOf('className="sites-skeleton-status"');
-  assert.ok(shellIndex >= 0 && statusIndex > shellIndex);
-  assert.match(css, /position:\s*fixed/);
-  assert.match(css, /inset:\s*0/);
-  assert.match(css, /opacity:\s*0\.52/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.doesNotMatch(css, /#020617|canvas|pets|progress/i);
-  assert.doesNotMatch(
-    preview,
-    /loading-spinner|status-mark|status-progress|canvas|cookie|random/i,
-  );
-
-  assert.match(page, /export const metadata:\s*Metadata/);
-  assert.match(page, /"codex-preview": "development"/);
-  assert.match(page, /<SkeletonPreview \/>/);
-  assert.match(layout, /title:\s*"Starter Project"/);
-  assert.doesNotMatch(layout, /codex-preview|_sites-preview|themeColor|\bViewport\b/);
-  assert.doesNotMatch(css, /(^|\s)(html|body)\s*\{/m);
-
-  await assert.rejects(
-    access(new URL("public/_sites-preview", templateRoot)),
-  );
+  assert.match(api, /action === "addBots"/);
+  assert.match(api, /action === "removeBot"/);
+  assert.match(api, /isBot\(current\)/);
+  assert.match(api, /room\.phase === "voting" \|\| room\.phase === "runoff"/);
+  assert.match(api, /action === "updateSettings"/);
+  assert.match(api, /action === "passTurn"/);
+  assert.match(api, /action === "advancePhase"/);
+  assert.match(api, /action === "useAbility"/);
+  assert.match(api, /function hasActivatedDoubleVote/);
+  assert.match(api, /activeCard\(player\)\?\.action === "double_vote"/);
+  assert.match(api, /const weight = hasActivatedDoubleVote\(player, room\) \? 2 : 1/);
+  assert.match(api, /player\.vote_round === room\.round && player\.vote_phase === room\.phase[\s\S]*Ви вже проголосували в цьому раунді/);
+  assert.match(api, /vote_round IS NULL OR vote_phase IS NULL OR vote_round != \? OR vote_phase != \?/);
+  assert.match(api, /if \(!voteResult\.meta\.changes\)/);
+  assert.match(api, /voteCounts/);
+  assert.match(api, /room\.round === 1[\s\S]*Перше коло завершено без голосування/);
+  assert.match(api, /seatsCount/);
+  assert.match(api, /settingsFromRoom/);
+  assert.doesNotMatch(api, /selected = "profession"/);
+  assert.doesNotMatch(api, /worldEvents|phase === "event"/);
+  assert.match(client, /Заповнити до старту/);
+  assert.match(client, /Самі відкривають карти й голосують/);
+  assert.match(client, /Усі фази без таймерів/);
+  assert.match(client, /Передати хід/);
+  assert.match(client, /Активувати картку/);
+  assert.match(client, /Обговорення без голосування/);
+  assert.match(client, /Перейти до другого раунду/);
+  assert.doesNotMatch(client, /lockedProfession/);
+  assert.match(client, /Повернутися до гри/);
+  assert.match(client, /aria-label="На головний екран"/);
+  assert.match(client, /player-profile-list/);
+  assert.match(client, /known \? card\?\.value/);
+  assert.doesNotMatch(client, /publicCard \? "Відкрито"/);
+  assert.doesNotMatch(client, /player\.isYou \? "Приватно"/);
+  assert.doesNotMatch(client, /setInterval\(update, 250\)/);
+  assert.match(client, /function RoundTimer/);
+  assert.match(client, /gameStateFingerprint/);
+  assert.match(client, /document\.visibilityState === "visible"/);
+  assert.match(client, /scenario-strip/);
+  assert.match(client, /round-control-dock/);
+  assert.match(client, /profile-icon/);
+  assert.match(client, /term-help/);
+  assert.match(client, /term-help-placeholder/);
+  assert.match(client, /player-vote-tally/);
+  assert.match(client, /Проголосували \{votesCast\}\/\{eligibleVoters\.length\}/);
+  assert.match(client, /title: "Відкрите голосування"/);
+  assert.match(client, /role="tooltip"/);
+  assert.match(client, /event\.key === "Escape"/);
+  assert.match(client, /type="number"/);
+  assert.match(client, /seatsCount/);
+  assert.doesNotMatch(client, /seatsPercent/);
+  assert.doesNotMatch(client, />Журнал</);
+  assert.match(data, /makeCharacters/);
+  assert.match(data, /phobia: \{ label: "Фобія"/);
+  for (const ability of ["reroll_self", "swap", "immunity", "expose", "scramble", "double_vote"]) {
+    assert.match(data, new RegExp(`\"${ability}\"`));
+  }
+  assert.match(css, /\.vote-button[\s\S]*font-size: 11px/);
+  assert.match(css, /\.scenario-body p[\s\S]*font-size: 13px/);
+  for (const scenario of ["catastrophe", "bunker", "outside"]) {
+    assert.match(css, new RegExp(`url\\("\\/scenario-${scenario}\\.avif"\\) type\\("image\\/avif"\\)`));
+    assert.match(css, new RegExp(`url\\("\\/scenario-${scenario}\\.webp"\\) type\\("image\\/webp"\\)`));
+  }
+  assert.match(css, /url\("\/bunker-command\.avif"\) type\("image\/avif"\)/);
+  assert.match(css, /url\("\/bunker-command\.webp"\) type\("image\/webp"\)/);
+  assert.match(css, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)[\s\S]*\.scenario-card/);
+  assert.match(css, /@keyframes active-player-pulse/);
+  assert.match(css, /@keyframes characteristic-reveal/);
+  assert.match(css, /@keyframes player-excluded/);
+  assert.match(css, /content-visibility: auto/);
+  assert.match(css, /--color-action: #63d5ff/);
+  assert.match(css, /\.term-help\.open \.term-tooltip/);
+  assert.match(css, /button\.term-help[\s\S]*grid-template-columns: 1fr/);
+  assert.match(css, /\.term-tooltip \{[\s\S]*left: -12px;[\s\S]*right: auto/);
+  assert.match(css, /\.player-vote-tally/);
+  assert.match(startFile, /npm run dev -- --port 3000/);
+  assert.match(stopFile, /kill "\$SERVER_PID"/);
+  assert.notEqual(startStats.mode & 0o100, 0);
+  assert.notEqual(stopStats.mode & 0o100, 0);
 });

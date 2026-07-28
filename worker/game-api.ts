@@ -2,12 +2,13 @@ import {
   bunkers,
   catastrophes,
   categoryOrder,
-  makeCharacter,
+  makeCard,
+  makeCharacters,
   outsideWorlds,
   pick,
-  worldEvents,
+  type ActiveAbility,
+  type CharacterCategory,
   type CharacterCard,
-  type WorldEvent,
 } from "./game-data";
 
 type Env = { DB: D1Database };
@@ -15,13 +16,12 @@ type Env = { DB: D1Database };
 type Settings = {
   minPlayers: number;
   maxPlayers: number;
-  seatsPercent: number;
+  seatsCount: number;
   revealSeconds: number;
   discussionSeconds: number;
   votingSeconds: number;
   publicVotes: boolean;
   excludedCanVote: boolean;
-  eventFrequency: "each" | "alternate";
   victoryRule: "survival" | "legacy";
 };
 
@@ -62,20 +62,19 @@ type PlayerRow = {
 
 type LogEntry = {
   at: number;
-  kind: "system" | "reveal" | "vote" | "event";
+  kind: "system" | "reveal" | "vote" | "ability";
   text: string;
 };
 
 const defaultSettings: Settings = {
-  minPlayers: 4,
+  minPlayers: 8,
   maxPlayers: 8,
-  seatsPercent: 50,
-  revealSeconds: 35,
-  discussionSeconds: 75,
-  votingSeconds: 45,
-  publicVotes: false,
+  seatsCount: 4,
+  revealSeconds: 0,
+  discussionSeconds: 0,
+  votingSeconds: 0,
+  publicVotes: true,
   excludedCanVote: false,
-  eventFrequency: "each",
   victoryRule: "survival",
 };
 
@@ -148,24 +147,66 @@ function clamp(value: unknown, min: number, max: number, fallback: number) {
   return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.round(number))) : fallback;
 }
 
+function cleanDuration(value: unknown, min: number, max: number, fallback: number) {
+  if (Number(value) === 0) return 0;
+  return clamp(value, min, max, fallback);
+}
+
+function phaseDeadline(seconds: number, multiplier = 1) {
+  return seconds > 0 ? Date.now() + Math.round(seconds * multiplier) * 1000 : null;
+}
+
 function cleanName(value: unknown) {
-  return text(value, "Гравець").replace(/[<>]/g, "").slice(0, 24) || "Гравець";
+  return text(value).replace(/[<>]/g, "").slice(0, 24);
+}
+
+function isBot(player: PlayerRow) {
+  return player.token.startsWith("bot:");
+}
+
+const botNames = [
+  "Атлас",
+  "Лада",
+  "Орест",
+  "Міра",
+  "Терен",
+  "Веста",
+  "Скіф",
+  "Зоря",
+  "Крук",
+  "Тайра",
+  "Марс",
+] as const;
+
+function guestName(players: PlayerRow[]) {
+  let number = players.filter((player) => player.name.startsWith("Гість ")).length + 1;
+  while (players.some((player) => player.name.toLocaleLowerCase("uk") === `гість ${number}`)) number += 1;
+  return `Гість ${number}`;
+}
+
+function availableBotName(players: PlayerRow[], offset = 0) {
+  const used = new Set(players.map((player) => player.name.toLocaleLowerCase("uk")));
+  const available = botNames.filter((name) => !used.has(name.toLocaleLowerCase("uk")));
+  return available[offset] ?? `Бот ${players.filter(isBot).length + offset + 1}`;
 }
 
 function cleanSettings(input: unknown): Settings {
   const source = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
   const maxPlayers = clamp(source.maxPlayers, 4, 12, defaultSettings.maxPlayers);
-  const minPlayers = clamp(source.minPlayers, 4, maxPlayers, Math.min(defaultSettings.minPlayers, maxPlayers));
+  const minPlayers = clamp(source.minPlayers, 4, maxPlayers, maxPlayers);
+  const legacySeats = Math.max(
+    2,
+    Math.floor((maxPlayers * clamp(source.seatsPercent, 40, 60, 50)) / 100),
+  );
   return {
     minPlayers,
     maxPlayers,
-    seatsPercent: clamp(source.seatsPercent, 40, 60, defaultSettings.seatsPercent),
-    revealSeconds: clamp(source.revealSeconds, 20, 90, defaultSettings.revealSeconds),
-    discussionSeconds: clamp(source.discussionSeconds, 30, 180, defaultSettings.discussionSeconds),
-    votingSeconds: clamp(source.votingSeconds, 20, 90, defaultSettings.votingSeconds),
+    seatsCount: clamp(source.seatsCount, 2, maxPlayers - 1, legacySeats),
+    revealSeconds: cleanDuration(source.revealSeconds, 15, 300, defaultSettings.revealSeconds),
+    discussionSeconds: cleanDuration(source.discussionSeconds, 30, 600, defaultSettings.discussionSeconds),
+    votingSeconds: cleanDuration(source.votingSeconds, 15, 300, defaultSettings.votingSeconds),
     publicVotes: Boolean(source.publicVotes),
     excludedCanVote: Boolean(source.excludedCanVote),
-    eventFrequency: source.eventFrequency === "alternate" ? "alternate" : "each",
     victoryRule: source.victoryRule === "legacy" ? "legacy" : "survival",
   };
 }
@@ -204,6 +245,10 @@ function parse<T>(value: string | null, fallback: T): T {
   }
 }
 
+function settingsFromRoom(room: RoomRow) {
+  return cleanSettings(parse<Record<string, unknown>>(room.settings_json, {}));
+}
+
 async function appendLog(db: D1Database, room: RoomRow, entry: Omit<LogEntry, "at">) {
   const log = parse<LogEntry[]>(room.log_json, []);
   log.push({ ...entry, at: Date.now() });
@@ -221,16 +266,17 @@ async function authenticatedPlayer(db: D1Database, code: string, playerId: strin
 
 async function maybeStart(db: D1Database, room: RoomRow) {
   if (room.status !== "lobby") return room;
-  const settings = parse<Settings>(room.settings_json, defaultSettings);
+  const settings = settingsFromRoom(room);
   const players = await playersByRoom(db, room.code);
   if (players.length < settings.minPlayers || players.some((player) => !player.ready)) return room;
 
   const now = Date.now();
-  const seats = Math.max(2, Math.floor((players.length * settings.seatsPercent) / 100));
-  const assignments = players.map((player) =>
+  const seats = Math.min(players.length - 1, settings.seatsCount);
+  const characters = makeCharacters(players.length);
+  const assignments = players.map((player, index) =>
     db
       .prepare("UPDATE players SET character_json = ?, revealed_json = '[]', active = 1 WHERE id = ?")
-      .bind(JSON.stringify(makeCharacter()), player.id),
+      .bind(JSON.stringify(characters[index]), player.id),
   );
   await db.batch(assignments);
   await db
@@ -241,7 +287,7 @@ async function maybeStart(db: D1Database, room: RoomRow) {
        WHERE code = ?`,
     )
     .bind(
-      now + 18_000,
+      settings.revealSeconds === 0 ? null : now + 8_000,
       JSON.stringify(pick(catastrophes)),
       JSON.stringify(pick(bunkers)),
       JSON.stringify(pick(outsideWorlds)),
@@ -258,21 +304,57 @@ async function maybeStart(db: D1Database, room: RoomRow) {
   return (await roomByCode(db, room.code))!;
 }
 
-function revealedCategories(player: PlayerRow) {
+function storedPlayerState(player: PlayerRow) {
   return parse<string[]>(player.revealed_json, []);
+}
+
+function revealedCategories(player: PlayerRow) {
+  return storedPlayerState(player).filter((value) =>
+    categoryOrder.includes(value as CharacterCategory),
+  );
+}
+
+function playerHasFlag(player: PlayerRow, flag: string) {
+  return storedPlayerState(player).includes(flag);
+}
+
+function phaseFlag(kind: "immune" | "double-vote", room: RoomRow) {
+  return `@${kind}:${room.round}:${room.phase}`;
+}
+
+async function addPlayerFlags(db: D1Database, player: PlayerRow, ...flags: string[]) {
+  const stored = storedPlayerState(player);
+  for (const flag of flags) {
+    if (!stored.includes(flag)) stored.push(flag);
+  }
+  await db.prepare("UPDATE players SET revealed_json = ? WHERE id = ?").bind(JSON.stringify(stored), player.id).run();
+}
+
+function activeCard(player: PlayerRow) {
+  return parse<CharacterCard[]>(player.character_json, []).find((card) => card.category === "special");
+}
+
+function hasActivatedDoubleVote(player: PlayerRow, room: RoomRow) {
+  return activeCard(player)?.action === "double_vote" &&
+    playerHasFlag(player, "@ability-used") &&
+    playerHasFlag(player, phaseFlag("double-vote", room));
+}
+
+function isCharacterCategory(value: string): value is CharacterCategory {
+  return categoryOrder.includes(value as CharacterCategory);
 }
 
 async function openCategory(db: D1Database, room: RoomRow, player: PlayerRow, category?: string) {
   const cards = parse<CharacterCard[]>(player.character_json, []);
+  const stored = storedPlayerState(player);
   const revealed = revealedCategories(player);
   let selected = category;
-  if (room.round === 1) selected = "profession";
   if (!selected || !categoryOrder.includes(selected as (typeof categoryOrder)[number]) || revealed.includes(selected)) {
     selected = categoryOrder.find((item) => !revealed.includes(item));
   }
   if (!selected) return;
-  revealed.push(selected);
-  await db.prepare("UPDATE players SET revealed_json = ? WHERE id = ?").bind(JSON.stringify(revealed), player.id).run();
+  stored.push(selected);
+  await db.prepare("UPDATE players SET revealed_json = ? WHERE id = ?").bind(JSON.stringify(stored), player.id).run();
   const card = cards.find((item) => item.category === selected);
   await appendLog(db, room, {
     kind: "reveal",
@@ -281,24 +363,24 @@ async function openCategory(db: D1Database, room: RoomRow, player: PlayerRow, ca
 }
 
 async function beginReveal(db: D1Database, room: RoomRow) {
-  const settings = parse<Settings>(room.settings_json, defaultSettings);
+  const settings = settingsFromRoom(room);
   const players = (await playersByRoom(db, room.code)).filter((player) => player.active);
   const first = players[0];
   if (!first) return;
   await db
     .prepare("UPDATE rooms SET phase = 'reveal', turn_seat = ?, phase_ends_at = ?, updated_at = ? WHERE code = ?")
-    .bind(first.seat, Date.now() + settings.revealSeconds * 1000, Date.now(), room.code)
+    .bind(first.seat, phaseDeadline(settings.revealSeconds), Date.now(), room.code)
     .run();
 }
 
 async function moveRevealTurn(db: D1Database, room: RoomRow) {
-  const settings = parse<Settings>(room.settings_json, defaultSettings);
+  const settings = settingsFromRoom(room);
   const players = (await playersByRoom(db, room.code)).filter((player) => player.active);
   const pending = players.filter((player) => revealedCategories(player).length < room.round);
   if (!pending.length) {
     await db
       .prepare("UPDATE rooms SET phase = 'discussion', turn_seat = NULL, phase_ends_at = ?, updated_at = ? WHERE code = ?")
-      .bind(Date.now() + settings.discussionSeconds * 1000, Date.now(), room.code)
+      .bind(phaseDeadline(settings.discussionSeconds), Date.now(), room.code)
       .run();
     await appendLog(db, room, { kind: "system", text: "Відкрита загальна дискусія." });
     return;
@@ -306,7 +388,7 @@ async function moveRevealTurn(db: D1Database, room: RoomRow) {
   const next = pending.find((player) => player.seat > (room.turn_seat ?? 0)) ?? pending[0]!;
   await db
     .prepare("UPDATE rooms SET turn_seat = ?, phase_ends_at = ?, updated_at = ? WHERE code = ?")
-    .bind(next.seat, Date.now() + settings.revealSeconds * 1000, Date.now(), room.code)
+    .bind(next.seat, phaseDeadline(settings.revealSeconds), Date.now(), room.code)
     .run();
 }
 
@@ -315,12 +397,17 @@ function eligibleVoters(players: PlayerRow[], settings: Settings) {
 }
 
 async function beginVoting(db: D1Database, room: RoomRow) {
-  const settings = parse<Settings>(room.settings_json, defaultSettings);
+  if (room.round === 1) {
+    await appendLog(db, room, { kind: "system", text: "Перше коло завершено без голосування." });
+    await nextRound(db, room);
+    return;
+  }
+  const settings = settingsFromRoom(room);
   await db.batch([
     db.prepare("UPDATE players SET vote_target = NULL, vote_round = NULL, vote_phase = NULL WHERE room_code = ?").bind(room.code),
     db
       .prepare("UPDATE rooms SET phase = 'voting', phase_ends_at = ?, runoff_json = NULL, updated_at = ? WHERE code = ?")
-      .bind(Date.now() + settings.votingSeconds * 1000, Date.now(), room.code),
+      .bind(phaseDeadline(settings.votingSeconds), Date.now(), room.code),
   ]);
   await appendLog(db, room, { kind: "system", text: "Голосування відкрито." });
 }
@@ -330,7 +417,12 @@ function tally(players: PlayerRow[], room: RoomRow, settings: Settings) {
   const counts = new Map<string, number>();
   for (const player of players) {
     if (!allowed.has(player.id) || player.vote_round !== room.round || player.vote_phase !== room.phase || !player.vote_target) continue;
-    counts.set(player.vote_target, (counts.get(player.vote_target) ?? 0) + 1);
+    const weight = hasActivatedDoubleVote(player, room) ? 2 : 1;
+    counts.set(player.vote_target, (counts.get(player.vote_target) ?? 0) + weight);
+  }
+  for (const candidate of players) {
+    if (!playerHasFlag(candidate, phaseFlag("immune", room))) continue;
+    counts.set(candidate.id, Math.max(0, (counts.get(candidate.id) ?? 0) - 1));
   }
   return counts;
 }
@@ -354,22 +446,11 @@ async function eliminate(db: D1Database, room: RoomRow, playerId: string) {
     return;
   }
 
-  const settings = parse<Settings>(room.settings_json, defaultSettings);
-  const showEvent = settings.eventFrequency === "each" || room.round % 2 === 1;
-  if (showEvent) {
-    const event = pick(worldEvents);
-    await db
-      .prepare("UPDATE rooms SET phase = 'event', current_event_json = ?, phase_ends_at = ?, runoff_json = NULL, updated_at = ? WHERE code = ?")
-      .bind(JSON.stringify(event), Date.now() + 14_000, Date.now(), room.code)
-      .run();
-    await appendLog(db, room, { kind: "event", text: `${event.zone}: ${event.title}.` });
-  } else {
-    await nextRound(db, room);
-  }
+  await nextRound(db, room);
 }
 
 async function resolveVote(db: D1Database, room: RoomRow) {
-  const settings = parse<Settings>(room.settings_json, defaultSettings);
+  const settings = settingsFromRoom(room);
   const players = await playersByRoom(db, room.code);
   const counts = tally(players, room, settings);
   const candidates = players.filter((player) => player.active);
@@ -383,7 +464,12 @@ async function resolveVote(db: D1Database, room: RoomRow) {
       db.prepare("UPDATE players SET vote_target = NULL, vote_round = NULL, vote_phase = NULL WHERE room_code = ?").bind(room.code),
       db
         .prepare("UPDATE rooms SET phase = 'runoff', runoff_json = ?, phase_ends_at = ?, updated_at = ? WHERE code = ?")
-        .bind(JSON.stringify(tiedIds), Date.now() + Math.max(20, Math.floor(settings.votingSeconds * 0.7)) * 1000, Date.now(), room.code),
+        .bind(
+          JSON.stringify(tiedIds),
+          settings.votingSeconds === 0 ? null : phaseDeadline(settings.votingSeconds, 0.7),
+          Date.now(),
+          room.code,
+        ),
     ]);
     await appendLog(db, room, { kind: "vote", text: `Нічия. Переголосування між: ${leaders.map((player) => player.name).join(", ")}.` });
     return;
@@ -412,6 +498,50 @@ async function advanceGame(db: D1Database, code: string) {
   room = await maybeStart(db, room);
 
   for (let guard = 0; guard < 20 && room.status === "playing"; guard += 1) {
+    if (room.phase === "reveal") {
+      const players = await playersByRoom(db, code);
+      const current = players.find((player) => player.active && player.seat === room!.turn_seat);
+      if (current && isBot(current)) {
+        if (revealedCategories(current).length < room.round) await openCategory(db, room, current);
+        await moveRevealTurn(db, room);
+        room = (await roomByCode(db, code))!;
+        continue;
+      }
+    }
+
+    if (room.phase === "voting" || room.phase === "runoff") {
+      const settings = settingsFromRoom(room);
+      const players = await playersByRoom(db, code);
+      const runoff = parse<string[]>(room.runoff_json, []);
+      const candidates = players.filter((candidate) => candidate.active && (room!.phase !== "runoff" || runoff.includes(candidate.id)));
+      const bots = eligibleVoters(players, settings).filter(
+        (bot) => isBot(bot) && (bot.vote_round !== room!.round || bot.vote_phase !== room!.phase),
+      );
+
+      if (bots.length) {
+        const votes = bots.flatMap((bot) => {
+          const options = candidates.filter((candidate) => candidate.id !== bot.id);
+          const target = options[Math.floor(Math.random() * options.length)];
+          return target
+            ? [
+                db
+                  .prepare("UPDATE players SET vote_target = ?, vote_round = ?, vote_phase = ? WHERE id = ?")
+                  .bind(target.id, room!.round, room!.phase, bot.id),
+              ]
+            : [];
+        });
+        if (votes.length) await db.batch(votes);
+
+        const refreshedPlayers = await playersByRoom(db, code);
+        const required = eligibleVoters(refreshedPlayers, settings);
+        if (required.every((player) => player.vote_round === room!.round && player.vote_phase === room!.phase)) {
+          await resolveVote(db, room);
+          room = (await roomByCode(db, code))!;
+          continue;
+        }
+      }
+    }
+
     const now = Date.now();
     if (!room.phase_ends_at || now < room.phase_ends_at) break;
 
@@ -420,14 +550,12 @@ async function advanceGame(db: D1Database, code: string) {
     } else if (room.phase === "reveal") {
       const players = await playersByRoom(db, code);
       const current = players.find((player) => player.active && player.seat === room!.turn_seat);
-      if (current) await openCategory(db, room, current);
+      if (current && revealedCategories(current).length < room.round) await openCategory(db, room, current);
       await moveRevealTurn(db, room);
     } else if (room.phase === "discussion") {
       await beginVoting(db, room);
     } else if (room.phase === "voting" || room.phase === "runoff") {
       await resolveVote(db, room);
-    } else if (room.phase === "event") {
-      await nextRound(db, room);
     } else {
       break;
     }
@@ -441,7 +569,7 @@ function outcome(players: PlayerRow[], room: RoomRow) {
   const cards = survivors.flatMap((player) => parse<CharacterCard[]>(player.character_json, []));
   const positives = cards.filter((card) => card.tone === "good").length;
   const risks = cards.filter((card) => card.tone === "risk").length;
-  const settings = parse<Settings>(room.settings_json, defaultSettings);
+  const settings = settingsFromRoom(room);
   const biology = cards.filter((card) => card.category === "biology").map((card) => card.value);
   const diversity = new Set(biology.map((value) => (value.startsWith("Жінка") ? "f" : value.startsWith("Чоловік") ? "m" : "x"))).size;
   const score = Math.max(22, Math.min(94, 46 + positives * 3 - risks * 4 + diversity * 5));
@@ -462,11 +590,15 @@ function outcome(players: PlayerRow[], room: RoomRow) {
 
 async function publicState(db: D1Database, room: RoomRow, viewer: PlayerRow) {
   const players = await playersByRoom(db, room.code);
-  const settings = parse<Settings>(room.settings_json, defaultSettings);
+  const settings = settingsFromRoom(room);
   const now = Date.now();
   const runoff = parse<string[]>(room.runoff_json, []);
   const votes = settings.publicVotes && (room.phase === "voting" || room.phase === "runoff")
     ? Object.fromEntries(players.filter((player) => player.vote_target).map((player) => [player.id, player.vote_target]))
+    : {};
+  const voteTallies = tally(players, room, settings);
+  const voteCounts = settings.publicVotes && (room.phase === "voting" || room.phase === "runoff")
+    ? Object.fromEntries(players.map((player) => [player.id, voteTallies.get(player.id) ?? 0]))
     : {};
 
   return {
@@ -483,11 +615,11 @@ async function publicState(db: D1Database, room: RoomRow, viewer: PlayerRow) {
       catastrophe: parse(room.catastrophe_json, null),
       bunker: parse(room.bunker_json, null),
       outside: parse(room.outside_json, null),
-      currentEvent: parse<WorldEvent | null>(room.current_event_json, null),
       runoff,
       log: parse<LogEntry[]>(room.log_json, []),
       outcome: room.status === "finished" ? outcome(players, room) : null,
       votes,
+      voteCounts,
     },
     players: players.map((player) => {
       const allCards = parse<CharacterCard[]>(player.character_json, []);
@@ -498,11 +630,14 @@ async function publicState(db: D1Database, room: RoomRow, viewer: PlayerRow) {
         seat: player.seat,
         ready: Boolean(player.ready),
         active: Boolean(player.active),
-        online: now - player.last_seen < 20_000,
+        online: isBot(player) || now - player.last_seen < 20_000,
+        isBot: isBot(player),
         isYou: player.id === viewer.id,
         revealed: allCards.filter((card) => revealed.includes(card.category)),
         character: room.status === "finished" ? allCards : undefined,
         hasVoted: player.vote_round === room.round && player.vote_phase === room.phase,
+        protected: playerHasFlag(player, phaseFlag("immune", room)),
+        doubleVote: hasActivatedDoubleVote(player, room),
       };
     }),
     you: {
@@ -515,6 +650,9 @@ async function publicState(db: D1Database, room: RoomRow, viewer: PlayerRow) {
       revealed: revealedCategories(viewer),
       voteTarget:
         viewer.vote_round === room.round && viewer.vote_phase === room.phase ? viewer.vote_target : null,
+      canManageBots: viewer.seat === 1,
+      canControlPhases: viewer.seat === 1,
+      abilityUsed: playerHasFlag(viewer, "@ability-used"),
     },
   };
 }
@@ -538,7 +676,7 @@ async function createRoom(db: D1Database, body: Record<string, unknown>) {
         `INSERT INTO players (id, room_code, name, token, seat, ready, active, last_seen)
          VALUES (?, ?, ?, ?, 1, 0, 1, ?)`,
       )
-      .bind(playerId, code, cleanName(body.name), token, now),
+      .bind(playerId, code, cleanName(body.name) || "Гість 1", token, now),
   ]);
   return json({ ok: true, session: { code, playerId, token } }, 201);
 }
@@ -548,10 +686,10 @@ async function joinRoom(db: D1Database, body: Record<string, unknown>) {
   const room = await roomByCode(db, code);
   if (!room) return json({ error: "Кімнату з таким кодом не знайдено." }, 404);
   if (room.status !== "lobby") return json({ error: "Ця експедиція вже розпочалася." }, 409);
-  const settings = parse<Settings>(room.settings_json, defaultSettings);
+  const settings = settingsFromRoom(room);
   const players = await playersByRoom(db, code);
   if (players.length >= settings.maxPlayers) return json({ error: "У кімнаті вже немає вільних місць." }, 409);
-  const name = cleanName(body.name);
+  const name = cleanName(body.name) || guestName(players);
   if (players.some((player) => player.name.toLocaleLowerCase("uk") === name.toLocaleLowerCase("uk"))) {
     return json({ error: "Це ім’я вже зайняте в кімнаті." }, 409);
   }
@@ -569,6 +707,95 @@ async function joinRoom(db: D1Database, body: Record<string, unknown>) {
   return json({ ok: true, session: { code, playerId, token } }, 201);
 }
 
+async function applyActiveAbility(
+  db: D1Database,
+  room: RoomRow,
+  player: PlayerRow,
+  body: Record<string, unknown>,
+): Promise<Response | null> {
+  if (room.status !== "playing" || !player.active) {
+    return json({ error: "Активну картку можна використати лише під час гри." }, 409);
+  }
+  if (playerHasFlag(player, "@ability-used")) {
+    return json({ error: "Цю активну картку вже використано." }, 409);
+  }
+
+  const card = activeCard(player);
+  const ability = card?.action as ActiveAbility | undefined;
+  if (!card || !ability) return json({ error: "У вашому досьє немає активної картки." }, 404);
+
+  const category = text(body.category);
+  const players = await playersByRoom(db, room.code);
+  const targetId = text(body.targetId);
+  const target = players.find((item) => item.id === targetId && item.active && item.id !== player.id);
+  const playerCards = parse<CharacterCard[]>(player.character_json, []);
+  let logText = `${player.name} використовує активну картку «${card.value}».`;
+  const requiresCategory = ["reroll_self", "swap", "expose", "scramble"].includes(ability);
+
+  if (requiresCategory && (!isCharacterCategory(category) || category === "special")) {
+    return json({ error: "Оберіть характеристику для дії активної картки." }, 400);
+  }
+
+  if (ability === "reroll_self") {
+    const index = playerCards.findIndex((item) => item.category === category);
+    if (index < 0) return json({ error: "Характеристику не знайдено." }, 404);
+    playerCards[index] = makeCard(category, playerCards[index]!.value);
+    await db.prepare("UPDATE players SET character_json = ? WHERE id = ?").bind(JSON.stringify(playerCards), player.id).run();
+    logText = `${player.name} оновлює власну характеристику «${playerCards[index]!.label}».`;
+  } else if (ability === "swap") {
+    if (!target) return json({ error: "Оберіть іншого активного гравця." }, 400);
+    const targetCards = parse<CharacterCard[]>(target.character_json, []);
+    const ownIndex = playerCards.findIndex((item) => item.category === category);
+    const targetIndex = targetCards.findIndex((item) => item.category === category);
+    if (ownIndex < 0 || targetIndex < 0) return json({ error: "Характеристику не знайдено." }, 404);
+    const ownCard = playerCards[ownIndex]!;
+    playerCards[ownIndex] = { ...targetCards[targetIndex]!, category, label: ownCard.label };
+    targetCards[targetIndex] = { ...ownCard, category, label: targetCards[targetIndex]!.label };
+    await db.batch([
+      db.prepare("UPDATE players SET character_json = ? WHERE id = ?").bind(JSON.stringify(playerCards), player.id),
+      db.prepare("UPDATE players SET character_json = ? WHERE id = ?").bind(JSON.stringify(targetCards), target.id),
+    ]);
+    logText = `${player.name} та ${target.name} обмінюються характеристикою «${ownCard.label}».`;
+  } else if (ability === "immunity") {
+    if (!["voting", "runoff"].includes(room.phase)) {
+      return json({ error: "Імунітет активується лише під час голосування." }, 409);
+    }
+    await addPlayerFlags(db, player, "@ability-used", phaseFlag("immune", room));
+    await appendLog(db, room, { kind: "ability", text: `${player.name} активує імунітет: один голос не буде враховано.` });
+    return null;
+  } else if (ability === "expose") {
+    if (!target) return json({ error: "Оберіть іншого активного гравця." }, 400);
+    if (revealedCategories(target).includes(category)) {
+      return json({ error: "Ця характеристика гравця вже відкрита." }, 409);
+    }
+    const stored = storedPlayerState(target);
+    stored.push(category);
+    await db.prepare("UPDATE players SET revealed_json = ? WHERE id = ?").bind(JSON.stringify(stored), target.id).run();
+    const exposed = parse<CharacterCard[]>(target.character_json, []).find((item) => item.category === category);
+    logText = `${player.name} відкриває картку ${target.name}: ${exposed?.label} — ${exposed?.value}.`;
+  } else if (ability === "scramble") {
+    if (!target) return json({ error: "Оберіть іншого активного гравця." }, 400);
+    const targetCards = parse<CharacterCard[]>(target.character_json, []);
+    const index = targetCards.findIndex((item) => item.category === category);
+    if (index < 0) return json({ error: "Характеристику не знайдено." }, 404);
+    const previous = targetCards[index]!;
+    targetCards[index] = makeCard(category, previous.value);
+    await db.prepare("UPDATE players SET character_json = ? WHERE id = ?").bind(JSON.stringify(targetCards), target.id).run();
+    logText = `${player.name} змінює характеристику «${previous.label}» у досьє ${target.name}.`;
+  } else if (ability === "double_vote") {
+    if (!["voting", "runoff"].includes(room.phase)) {
+      return json({ error: "Подвійний голос активується лише під час голосування." }, 409);
+    }
+    await addPlayerFlags(db, player, "@ability-used", phaseFlag("double-vote", room));
+    await appendLog(db, room, { kind: "ability", text: `${player.name} активує подвійний голос.` });
+    return null;
+  }
+
+  await addPlayerFlags(db, player, "@ability-used");
+  await appendLog(db, room, { kind: "ability", text: logText });
+  return null;
+}
+
 async function handleAction(db: D1Database, body: Record<string, unknown>) {
   const code = text(body.code).toUpperCase();
   const playerId = text(body.playerId);
@@ -584,21 +811,86 @@ async function handleAction(db: D1Database, body: Record<string, unknown>) {
     await db.prepare("UPDATE players SET ready = ?, last_seen = ? WHERE id = ?").bind(body.ready ? 1 : 0, Date.now(), player.id).run();
     room = (await roomByCode(db, code))!;
     room = await maybeStart(db, room);
+  } else if (action === "updateSettings") {
+    if (room.status !== "lobby") return json({ error: "Правила можна змінювати лише до початку гри." }, 409);
+    if (player.seat !== 1) return json({ error: "Змінювати правила може творець кімнати." }, 403);
+    const players = await playersByRoom(db, code);
+    const settings = cleanSettings(body.settings);
+    if (settings.maxPlayers < players.length) {
+      return json({ error: `У кімнаті вже ${players.length} учасників. Збільште ліміт гравців.` }, 400);
+    }
+    await db.batch([
+      db.prepare("UPDATE rooms SET settings_json = ?, updated_at = ? WHERE code = ?").bind(JSON.stringify(settings), Date.now(), code),
+      db.prepare("UPDATE players SET ready = 0 WHERE room_code = ? AND token NOT LIKE 'bot:%'").bind(code),
+    ]);
+    await appendLog(db, room, { kind: "system", text: "Творець кімнати оновив правила. Гравцям потрібно підтвердити готовність ще раз." });
+  } else if (action === "addBots") {
+    if (room.status !== "lobby") return json({ error: "Ботів можна додавати лише до початку гри." }, 409);
+    if (player.seat !== 1) return json({ error: "Керувати ботами може творець кімнати." }, 403);
+    const players = await playersByRoom(db, code);
+    const settings = settingsFromRoom(room);
+    const freeSeats = settings.maxPlayers - players.length;
+    if (freeSeats <= 0) return json({ error: "У кімнаті вже немає вільних місць." }, 409);
+    const count = clamp(body.count, 1, freeSeats, 1);
+    const firstSeat = Math.max(0, ...players.map((item) => item.seat)) + 1;
+    await db.batch(
+      Array.from({ length: count }, (_, index) => {
+        const botId = id(12);
+        return db
+          .prepare(
+            `INSERT INTO players (id, room_code, name, token, seat, ready, active, last_seen)
+             VALUES (?, ?, ?, ?, ?, 1, 1, ?)`,
+          )
+          .bind(botId, code, availableBotName(players, index), `bot:${id(16)}`, firstSeat + index, Date.now());
+      }),
+    );
+    await appendLog(db, room, { kind: "system", text: count === 1 ? "До групи додано бота." : `До групи додано ботів: ${count}.` });
+  } else if (action === "removeBot") {
+    if (room.status !== "lobby") return json({ error: "Ботів можна прибирати лише до початку гри." }, 409);
+    if (player.seat !== 1) return json({ error: "Керувати ботами може творець кімнати." }, 403);
+    const botId = text(body.botId);
+    const bot = (await playersByRoom(db, code)).find((item) => item.id === botId && isBot(item));
+    if (!bot) return json({ error: "Бота не знайдено." }, 404);
+    await db.prepare("DELETE FROM players WHERE id = ?").bind(bot.id).run();
+    await appendLog(db, room, { kind: "system", text: `${bot.name} залишає групу.` });
   } else if (action === "reveal") {
     if (room.phase !== "reveal" || !player.active || player.seat !== room.turn_seat) {
       return json({ error: "Зараз не ваш хід відкривати характеристику." }, 409);
     }
     const selected = text(body.category);
-    if (room.round === 1 && selected && selected !== "profession") {
-      return json({ error: "У першому раунді обов’язково відкривається професія." }, 409);
+    if (revealedCategories(player).length >= room.round) {
+      return json({ error: "Картку вже відкрито. Тепер обговоріть її та передайте хід." }, 409);
     }
     if (revealedCategories(player).includes(selected)) return json({ error: "Цю характеристику вже відкрито." }, 409);
     await openCategory(db, room, player, selected);
+  } else if (action === "passTurn") {
+    if (room.phase !== "reveal") return json({ error: "Зараз немає ходу, який можна передати." }, 409);
+    const players = await playersByRoom(db, code);
+    const current = players.find((item) => item.active && item.seat === room!.turn_seat);
+    if (!current) return json({ error: "Активного гравця не знайдено." }, 404);
+    const isCurrentPlayer = current.id === player.id;
+    if (!isCurrentPlayer && player.seat !== 1) return json({ error: "Передати цей хід може активний гравець або творець кімнати." }, 403);
+    if (revealedCategories(current).length < room.round) {
+      if (isCurrentPlayer) return json({ error: "Спочатку відкрийте одну характеристику." }, 409);
+      await openCategory(db, room, current);
+    }
     await moveRevealTurn(db, room);
+  } else if (action === "advancePhase") {
+    if (player.seat !== 1) return json({ error: "Керувати ручними фазами може творець кімнати." }, 403);
+    if (room.phase === "briefing") await beginReveal(db, room);
+    else if (room.phase === "discussion") await beginVoting(db, room);
+    else if (room.phase === "voting" || room.phase === "runoff") await resolveVote(db, room);
+    else return json({ error: "Цю фазу не можна завершити вручну." }, 409);
+  } else if (action === "useAbility") {
+    const errorResponse = await applyActiveAbility(db, room, player, body);
+    if (errorResponse) return errorResponse;
   } else if (action === "vote") {
-    const settings = parse<Settings>(room.settings_json, defaultSettings);
-    if (!["voting", "runoff"].includes(room.phase) || (!player.active && !settings.excludedCanVote)) {
+    const settings = settingsFromRoom(room);
+    if (room.round === 1 || !["voting", "runoff"].includes(room.phase) || (!player.active && !settings.excludedCanVote)) {
       return json({ error: "Зараз голосування недоступне." }, 409);
+    }
+    if (player.vote_round === room.round && player.vote_phase === room.phase) {
+      return json({ error: "Ви вже проголосували в цьому раунді." }, 409);
     }
     const targetId = text(body.targetId);
     const players = await playersByRoom(db, code);
@@ -606,10 +898,18 @@ async function handleAction(db: D1Database, body: Record<string, unknown>) {
     if (!target || target.id === player.id) return json({ error: "Оберіть іншого активного гравця." }, 400);
     const runoff = parse<string[]>(room.runoff_json, []);
     if (room.phase === "runoff" && !runoff.includes(target.id)) return json({ error: "У переголосуванні доступні лише кандидати з нічиєю." }, 400);
-    await db
-      .prepare("UPDATE players SET vote_target = ?, vote_round = ?, vote_phase = ?, last_seen = ? WHERE id = ?")
-      .bind(target.id, room.round, room.phase, Date.now(), player.id)
+    const voteResult = await db
+      .prepare(
+        `UPDATE players
+         SET vote_target = ?, vote_round = ?, vote_phase = ?, last_seen = ?
+         WHERE id = ?
+           AND (vote_round IS NULL OR vote_phase IS NULL OR vote_round != ? OR vote_phase != ?)`,
+      )
+      .bind(target.id, room.round, room.phase, Date.now(), player.id, room.round, room.phase)
       .run();
+    if (!voteResult.meta.changes) {
+      return json({ error: "Ви вже проголосували в цьому раунді." }, 409);
+    }
     const refreshedPlayers = await playersByRoom(db, code);
     const required = eligibleVoters(refreshedPlayers, settings);
     if (required.every((item) => item.vote_round === room!.round && item.vote_phase === room!.phase)) {
