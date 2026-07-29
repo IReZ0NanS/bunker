@@ -876,6 +876,19 @@ function Game({
 
       <section className="phase-bar">
         <div className="phase-copy"><small>{phase.eyebrow}</small><h1>{phase.title}</h1><p>{phase.hint}</p></div>
+        <div className="phase-command" aria-label="Поточний хід і керування фазою">
+          <div className="turn-summary">
+            <small>Раунд {String(state.room.round).padStart(2, "0")}</small>
+            <strong>{turnPlayer ? `${turnPlayer.isYou ? "Ваш хід" : `Хід: ${turnPlayer.name}`}` : phase.title}</strong>
+            <span>{yourTurn && !revealedThisRound ? "Оберіть характеристику у своїй картці" : "Система веде протокол"}</span>
+          </div>
+          <div className="phase-command-actions">
+            {(yourTurn && revealedThisRound) && <button className="pass-turn-button" disabled={busy} onClick={onPassTurn}>Передати хід →</button>}
+            {canSkipTurn && <button className="host-phase-button" disabled={busy} onClick={onPassTurn}>Пропустити: {turnPlayer.name}</button>}
+            {manualPhaseLabel && <button className="host-phase-button primary" disabled={busy} onClick={onAdvancePhase}>{manualPhaseLabel}</button>}
+            <RoundTimer phaseEndsAt={state.room.phaseEndsAt} />
+          </div>
+        </div>
       </section>
 
       <div className="game-layout">
@@ -890,19 +903,6 @@ function Game({
                   <ScenarioCard number="03" label="Стан поверхні" scenario={state.room.outside} variant="outside" />
                 </div>
               </section>
-              <section className="round-control-dock" aria-label="Керування раундом">
-                <div className="round-control-status">
-                  <span className="control-round">Раунд {String(state.room.round).padStart(2, "0")}</span>
-                  <strong>{turnPlayer ? `${turnPlayer.isYou ? "Ваш хід" : `Хід: ${turnPlayer.name}`}` : phase.title}</strong>
-                  <small>{yourTurn && !revealedThisRound ? "Оберіть характеристику у своїй картці" : phase.hint}</small>
-                </div>
-                <div className="round-control-actions">
-                  {(yourTurn && revealedThisRound) && <button className="pass-turn-button" disabled={busy} onClick={onPassTurn}>Передати хід →</button>}
-                  {canSkipTurn && <button className="host-phase-button" disabled={busy} onClick={onPassTurn}>Пропустити хід: {turnPlayer.name}</button>}
-                  {manualPhaseLabel && <button className="host-phase-button primary" disabled={busy} onClick={onAdvancePhase}>{manualPhaseLabel}</button>}
-                  <RoundTimer phaseEndsAt={state.room.phaseEndsAt} />
-                </div>
-              </section>
               <AbilityControls state={state} busy={busy} onUseAbility={onUseAbility} />
               <div className={`table-heading ${["voting", "runoff"].includes(state.room.phase) ? "voting-heading" : ""}`}>
                 <span><small>Кандидати</small><strong>{state.players.filter((player) => player.active).length} активних</strong></span>
@@ -913,7 +913,7 @@ function Game({
                   </em>
                 )}
               </div>
-              <div className="player-grid">
+              <div className="player-grid" data-player-count={state.players.length}>
                 {state.players.map((player) => <PlayerCard key={player.id} player={player} state={state} onReveal={onReveal} onVote={onVote} busy={busy} />)}
               </div>
             </>
