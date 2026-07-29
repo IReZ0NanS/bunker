@@ -624,6 +624,7 @@ async function publicState(db: D1Database, room: RoomRow, viewer: PlayerRow) {
     players: players.map((player) => {
       const allCards = parse<CharacterCard[]>(player.character_json, []);
       const revealed = revealedCategories(player);
+      const abilityUsed = playerHasFlag(player, "@ability-used");
       return {
         id: player.id,
         name: player.name,
@@ -635,6 +636,8 @@ async function publicState(db: D1Database, room: RoomRow, viewer: PlayerRow) {
         isYou: player.id === viewer.id,
         revealed: allCards.filter((card) => revealed.includes(card.category)),
         character: room.status === "finished" ? allCards : undefined,
+        ability: abilityUsed ? allCards.find((card) => card.category === "special") : undefined,
+        abilityUsed,
         hasVoted: player.vote_round === room.round && player.vote_phase === room.phase,
         protected: playerHasFlag(player, phaseFlag("immune", room)),
         doubleVote: hasActivatedDoubleVote(player, room),

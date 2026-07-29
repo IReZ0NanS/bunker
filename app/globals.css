@@ -2440,3 +2440,202 @@ input::placeholder {
 
   .landing-copy h1 { letter-spacing: -.018em; }
 }
+
+/* Active cards live inside player dossiers; gameplay cards are slightly denser. */
+.player-card {
+  min-height: 390px;
+  padding: 16px;
+  contain-intrinsic-block-size: 390px;
+}
+.avatar.small {
+  width: 39px;
+  height: 39px;
+}
+.player-topline { gap: 11px; }
+.player-effects {
+  min-height: 23px;
+  margin-top: 10px;
+}
+.player-profile-list { margin-top: 11px; }
+.player-profile-list .profile-row {
+  min-height: 32px;
+  padding: 5px 4px;
+}
+.player-profile-list .profile-row.can-reveal {
+  column-gap: 9px;
+}
+
+.player-ability-card {
+  position: relative;
+  border-top: 1px solid rgba(192,167,255,.28);
+  border-bottom: 1px solid rgba(192,167,255,.2);
+  background: linear-gradient(90deg, rgba(192,167,255,.1), rgba(99,213,255,.025));
+}
+.player-ability-summary {
+  min-width: 0;
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: 112px 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+}
+.player-ability-summary .profile-label {
+  color: #b9a8e3;
+  font-size: 9px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.ability-glyph {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--color-special) !important;
+  font-size: 13px !important;
+  line-height: 1;
+  filter: drop-shadow(0 0 7px rgba(192,167,255,.25));
+}
+.player-ability-summary .profile-value > b {
+  color: #e7ddff;
+}
+.player-ability-card.hidden .profile-value > b {
+  color: #718398;
+  font-size: 17px;
+}
+.player-ability-summary > em {
+  padding: 3px 6px;
+  border: 1px solid rgba(192,167,255,.34);
+  border-radius: 999px;
+  color: #cfc0f1;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: .06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.player-ability-card.used .player-ability-summary > em {
+  border-color: rgba(112,229,173,.34);
+  background: rgba(112,229,173,.08);
+  color: #9fecc5;
+}
+.player-ability-card.hidden {
+  background: rgba(95,113,133,.04);
+  border-color: rgba(145,163,183,.14);
+}
+.player-ability-card.hidden .ability-glyph {
+  color: #63758a !important;
+  filter: none;
+}
+.player-ability-card .spectator-note {
+  margin: 7px;
+  font-size: 9px;
+}
+.player-ability-controls {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border-top: 1px solid rgba(192,167,255,.18);
+  background: rgba(8,15,25,.38);
+}
+.player-ability-controls .ability-fields {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.player-ability-controls .ability-fields label:only-child { grid-column: 1 / -1; }
+.player-ability-controls .ability-fields label > span {
+  display: block;
+  margin-bottom: 4px;
+  color: #a99acb;
+  font-size: 7px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.player-ability-controls .ability-fields select {
+  width: 100%;
+  height: 32px;
+  padding: 0 7px;
+  border: 1px solid rgba(192,167,255,.34);
+  border-radius: 6px;
+  background: #151d2c;
+  color: var(--color-text);
+  font-size: 9px;
+}
+.player-profile-list .player-ability-controls .ability-button {
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--color-special);
+  border-radius: 6px;
+  background: var(--color-special);
+  color: #140c23;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+}
+.player-profile-list .player-ability-controls .ability-button:hover:not(:disabled) {
+  background: #d2c0ff;
+  box-shadow: none;
+}
+.player-profile-list .player-ability-controls .ability-button:disabled {
+  opacity: .46;
+  cursor: default;
+}
+
+@media (min-width: 2400px) {
+  .player-card {
+    min-height: 474px;
+    contain-intrinsic-block-size: 474px;
+  }
+  .player-profile-list .profile-row { min-height: 40px; }
+  .player-ability-summary {
+    min-height: 46px;
+    grid-template-columns: 150px 28px minmax(0, 1fr) auto;
+  }
+  .player-ability-summary .profile-label { font-size: 11px; }
+  .player-ability-controls .ability-fields select { height: 38px; font-size: 11px; }
+}
+
+@media (min-width: 3400px) {
+  .player-card {
+    min-height: 604px;
+    contain-intrinsic-block-size: 604px;
+  }
+  .avatar.small {
+    width: 54px;
+    height: 54px;
+  }
+  .player-profile-list .profile-row { min-height: 40px; }
+  .player-ability-summary {
+    min-height: 58px;
+    grid-template-columns: 190px 34px minmax(0, 1fr) auto;
+  }
+  .player-ability-summary .profile-label { font-size: 15px; }
+  .player-ability-summary > em { font-size: 11px; }
+  .player-ability-controls .ability-fields select { height: 48px; font-size: 15px; }
+  .player-profile-list .player-ability-controls .ability-button { min-height: 46px; font-size: 13px; }
+}
+
+@media (max-width: 760px) {
+  .player-card {
+    min-height: 385px;
+    padding: 16px;
+    contain-intrinsic-block-size: 385px;
+  }
+  .player-ability-summary {
+    grid-template-columns: 105px 24px minmax(0, 1fr);
+  }
+  .player-ability-summary > em {
+    grid-column: 3;
+    width: fit-content;
+    margin-bottom: 5px;
+  }
+  .player-ability-controls .ability-fields { grid-template-columns: 1fr; }
+}

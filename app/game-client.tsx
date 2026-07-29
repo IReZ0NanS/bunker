@@ -34,6 +34,8 @@ type Player = {
   isYou: boolean;
   revealed: Card[];
   character?: Card[];
+  ability?: Card;
+  abilityUsed: boolean;
   hasVoted: boolean;
   protected: boolean;
   doubleVote: boolean;
@@ -610,12 +612,14 @@ function PlayerCard({
   state,
   onReveal,
   onVote,
+  onUseAbility,
   busy,
 }: {
   player: Player;
   state: GameState;
   onReveal: (category: string) => void;
   onVote: (id: string) => void;
+  onUseAbility: (payload: Record<string, unknown>) => void;
   busy: boolean;
 }) {
   const canVote =
@@ -675,6 +679,12 @@ function PlayerCard({
             </div>
           );
         })}
+        <PlayerAbilityCard
+          player={player}
+          state={state}
+          busy={busy}
+          onUseAbility={onUseAbility}
+        />
       </div>
       {player.isYou && isTurn && (
         <div className="player-reveal-note">
@@ -698,38 +708,51 @@ function PlayerCard({
   );
 }
 
-function AbilityControls({
+function PlayerAbilityCard({
+  player,
   state,
   busy,
   onUseAbility,
 }: {
+  player: Player;
   state: GameState;
   busy: boolean;
   onUseAbility: (payload: Record<string, unknown>) => void;
 }) {
   const [abilityTarget, setAbilityTarget] = useState("");
   const [abilityCategory, setAbilityCategory] = useState("health");
-  const ability = state.you.character.find((card) => card.category === "special");
+  const privateAbility = player.isYou
+    ? state.you.character.find((card) => card.category === "special")
+    : undefined;
+  const ability = privateAbility ?? player.ability;
+  const abilityUsed = player.isYou ? state.you.abilityUsed : player.abilityUsed;
+  const abilityKnown = player.isYou || abilityUsed;
   const needsTarget = ["swap", "expose", "scramble"].includes(ability?.action ?? "");
   const needsCategory = ["reroll_self", "swap", "expose", "scramble"].includes(ability?.action ?? "");
   const votingAbility = ["immunity", "double_vote"].includes(ability?.action ?? "");
   const abilityAvailable =
     Boolean(ability?.action) &&
     state.you.active &&
-    !state.you.abilityUsed &&
+    !abilityUsed &&
     (!votingAbility || ["voting", "runoff"].includes(state.room.phase));
   const activeTargets = state.players.filter((player) => player.active && !player.isYou);
-  if (!ability) return null;
   return (
-    <section className={`ability-panel table-ability ${state.you.abilityUsed ? "used" : ""}`}>
-      <div className="ability-heading">
-        <span><small>Ваша активна картка · один раз за гру</small><strong>{ability.value}</strong></span>
-        <em>{state.you.abilityUsed ? "Використано" : "Готова"}</em>
+    <section className={`player-ability-card ${abilityKnown ? "known" : "hidden"} ${abilityUsed ? "used" : ""}`}>
+      <div className="player-ability-summary">
+        <span className="profile-label"><span className="ability-glyph" aria-hidden="true">✦</span>Активна карта</span>
+        {abilityKnown && ability?.note
+          ? <InfoTooltip label={ability.value} text={ability.note} />
+          : <span className="term-help-placeholder" aria-hidden="true" />}
+        <span className="profile-value">
+          <b>{abilityKnown ? ability?.value ?? "—" : "?"}</b>
+        </span>
+        <em>{abilityUsed ? "Використано" : player.isYou ? "Готова" : "Прихована"}</em>
       </div>
-      <p>{ability.note}</p>
-      {!state.you.active && <div className="spectator-note">Ви поза основним сховищем, але можете стежити за рішенням групи{state.room.settings.excludedCanVote ? " та голосувати" : ""}.</div>}
-      {!state.you.abilityUsed && (
-        <div className="ability-action-row">
+      {player.isYou && !state.you.active && (
+        <div className="spectator-note">Ви поза основним сховищем, але можете стежити за рішенням групи{state.room.settings.excludedCanVote ? " та голосувати" : ""}.</div>
+      )}
+      {player.isYou && !abilityUsed && ability && (
+        <div className="player-ability-controls">
           {(needsTarget || needsCategory) && (
             <div className="ability-fields">
               {needsTarget && (
@@ -903,7 +926,6 @@ function Game({
                   <RoundTimer phaseEndsAt={state.room.phaseEndsAt} />
                 </div>
               </section>
-              <AbilityControls state={state} busy={busy} onUseAbility={onUseAbility} />
               <div className={`table-heading ${["voting", "runoff"].includes(state.room.phase) ? "voting-heading" : ""}`}>
                 <span><small>Кандидати</small><strong>{state.players.filter((player) => player.active).length} активних</strong></span>
                 {["voting", "runoff"].includes(state.room.phase) && (
@@ -914,7 +936,17 @@ function Game({
                 )}
               </div>
               <div className="player-grid">
-                {state.players.map((player) => <PlayerCard key={player.id} player={player} state={state} onReveal={onReveal} onVote={onVote} busy={busy} />)}
+                {state.players.map((player) => (
+                  <PlayerCard
+                    key={player.id}
+                    player={player}
+                    state={state}
+                    onReveal={onReveal}
+                    onVote={onVote}
+                    onUseAbility={onUseAbility}
+                    busy={busy}
+                  />
+                ))}
               </div>
             </>
           )}
