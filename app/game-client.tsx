@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
 
 type Session = { code: string; playerId: string; token: string };
 type Card = {
@@ -34,6 +34,8 @@ type Player = {
   isYou: boolean;
   revealed: Card[];
   character?: Card[];
+  ability?: Card;
+  abilityUsed: boolean;
   hasVoted: boolean;
   protected: boolean;
   doubleVote: boolean;
@@ -75,6 +77,34 @@ type GameState = {
 };
 
 const sessionKey = "bunker-protocol-session";
+const dossierScaleKey = "bunker-protocol-dossier-scale";
+const dossierScaleEvent = "bunker-protocol-dossier-scale-change";
+let dossierScaleFallback = 100;
+
+function readDossierScale() {
+  if (typeof window === "undefined") return 100;
+  try {
+    const savedScale = Number(localStorage.getItem(dossierScaleKey));
+    if (Number.isFinite(savedScale) && savedScale >= 80 && savedScale <= 125) {
+      dossierScaleFallback = savedScale;
+    }
+  } catch {
+    // Use the in-memory preference when device storage is unavailable.
+  }
+  return dossierScaleFallback;
+}
+
+function subscribeToDossierScale(callback: () => void) {
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === dossierScaleKey) callback();
+  };
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(dossierScaleEvent, callback);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(dossierScaleEvent, callback);
+  };
+}
 
 const phaseCopy: Record<string, { eyebrow: string; title: string; hint: string }> = {
   briefing: { eyebrow: "Вхідні дані", title: "Оцініть загрозу", hint: "Система готує досьє та відкриває умови експедиції." },
@@ -610,12 +640,14 @@ function PlayerCard({
   state,
   onReveal,
   onVote,
+  onUseAbility,
   busy,
 }: {
   player: Player;
   state: GameState;
   onReveal: (category: string) => void;
   onVote: (id: string) => void;
+  onUseAbility: (payload: Record<string, unknown>) => void;
   busy: boolean;
 }) {
   const canVote =
@@ -675,6 +707,12 @@ function PlayerCard({
             </div>
           );
         })}
+        <PlayerAbilityCard
+          player={player}
+          state={state}
+          busy={busy}
+          onUseAbility={onUseAbility}
+        />
       </div>
       {player.isYou && isTurn && (
         <div className="player-reveal-note">
@@ -698,38 +736,51 @@ function PlayerCard({
   );
 }
 
-function AbilityControls({
+function PlayerAbilityCard({
+  player,
   state,
   busy,
   onUseAbility,
 }: {
+  player: Player;
   state: GameState;
   busy: boolean;
   onUseAbility: (payload: Record<string, unknown>) => void;
 }) {
   const [abilityTarget, setAbilityTarget] = useState("");
   const [abilityCategory, setAbilityCategory] = useState("health");
-  const ability = state.you.character.find((card) => card.category === "special");
+  const privateAbility = player.isYou
+    ? state.you.character.find((card) => card.category === "special")
+    : undefined;
+  const ability = privateAbility ?? player.ability;
+  const abilityUsed = player.isYou ? state.you.abilityUsed : player.abilityUsed;
+  const abilityKnown = player.isYou || abilityUsed;
   const needsTarget = ["swap", "expose", "scramble"].includes(ability?.action ?? "");
   const needsCategory = ["reroll_self", "swap", "expose", "scramble"].includes(ability?.action ?? "");
   const votingAbility = ["immunity", "double_vote"].includes(ability?.action ?? "");
   const abilityAvailable =
     Boolean(ability?.action) &&
     state.you.active &&
-    !state.you.abilityUsed &&
+    !abilityUsed &&
     (!votingAbility || ["voting", "runoff"].includes(state.room.phase));
   const activeTargets = state.players.filter((player) => player.active && !player.isYou);
-  if (!ability) return null;
   return (
-    <section className={`ability-panel table-ability ${state.you.abilityUsed ? "used" : ""}`}>
-      <div className="ability-heading">
-        <span><small>Ваша активна картка · один раз за гру</small><strong>{ability.value}</strong></span>
-        <em>{state.you.abilityUsed ? "Використано" : "Готова"}</em>
+    <section className={`player-ability-card ${abilityKnown ? "known" : "hidden"} ${abilityUsed ? "used" : ""}`}>
+      <div className="player-ability-summary">
+        <span className="profile-label"><span className="ability-glyph" aria-hidden="true">✦</span>Активна карта</span>
+        {abilityKnown && ability?.note
+          ? <InfoTooltip label={ability.value} text={ability.note} />
+          : <span className="term-help-placeholder" aria-hidden="true" />}
+        <span className="profile-value">
+          <b>{abilityKnown ? ability?.value ?? "—" : "?"}</b>
+        </span>
+        <em>{abilityUsed ? "Використано" : player.isYou ? "Готова" : "Прихована"}</em>
       </div>
-      <p>{ability.note}</p>
-      {!state.you.active && <div className="spectator-note">Ви поза основним сховищем, але можете стежити за рішенням групи{state.room.settings.excludedCanVote ? " та голосувати" : ""}.</div>}
-      {!state.you.abilityUsed && (
-        <div className="ability-action-row">
+      {player.isYou && !state.you.active && (
+        <div className="spectator-note">Ви поза основним сховищем, але можете стежити за рішенням групи{state.room.settings.excludedCanVote ? " та голосувати" : ""}.</div>
+      )}
+      {player.isYou && !abilityUsed && ability && (
+        <div className="player-ability-controls">
           {(needsTarget || needsCategory) && (
             <div className="ability-fields">
               {needsTarget && (
@@ -807,6 +858,69 @@ function RoundTimer({ phaseEndsAt }: { phaseEndsAt: number | null }) {
   );
 }
 
+function DossierScaleControl({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const presets = [
+    { value: 85, label: "Компактно" },
+    { value: 100, label: "Стандарт" },
+    { value: 115, label: "Збільшено" },
+  ];
+  return (
+    <details className="dossier-scale-control">
+      <summary>
+        <span aria-hidden="true">⚙</span>
+        Масштаб карток
+        <b>{value}%</b>
+      </summary>
+      <div className="dossier-scale-popover">
+        <div className="scale-popover-heading">
+          <span><small>Вигляд досьє</small><strong>Розмір карток і тексту</strong></span>
+          <output>{value}%</output>
+        </div>
+        <label className="dossier-scale-range">
+          <span>Менше</span>
+          <input
+            type="range"
+            min="80"
+            max="125"
+            step="5"
+            value={value}
+            aria-label="Масштаб карток гравців"
+            onChange={(event) => onChange(Number(event.target.value))}
+          />
+          <span>Більше</span>
+        </label>
+        <div className="dossier-scale-presets" aria-label="Готові розміри карток">
+          {presets.map((preset) => (
+            <button
+              type="button"
+              key={preset.value}
+              className={value === preset.value ? "active" : ""}
+              onClick={() => onChange(preset.value)}
+            >
+              <span>{preset.label}</span>
+              <b>{preset.value}%</b>
+            </button>
+          ))}
+        </div>
+        <p>Сітка автоматично перебудується — картки не перекриватимуть одна одну.</p>
+        <button
+          type="button"
+          className="scale-popover-done"
+          onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")}
+        >
+          Готово
+        </button>
+      </div>
+    </details>
+  );
+}
+
 function Game({
   state,
   busy,
@@ -862,8 +976,22 @@ function Game({
     ? state.players
     : state.players.filter((player) => player.active);
   const votesCast = eligibleVoters.filter((player) => player.hasVoted).length;
+  const dossierScale = useSyncExternalStore(subscribeToDossierScale, readDossierScale, () => 100);
+  const updateDossierScale = (nextValue: number) => {
+    const safeValue = Math.min(125, Math.max(80, Math.round(nextValue / 5) * 5));
+    dossierScaleFallback = safeValue;
+    try {
+      localStorage.setItem(dossierScaleKey, String(safeValue));
+    } catch {
+      // The visual preference still applies for the current session.
+    }
+    window.dispatchEvent(new Event(dossierScaleEvent));
+  };
+  const dossierStyle = {
+    "--dossier-scale": dossierScale / 100,
+  } as CSSProperties;
   return (
-    <main className={`game-shell phase-${state.room.phase}`}>
+    <main className={`game-shell phase-${state.room.phase}`} style={dossierStyle}>
       <header className="game-header">
         <Logo onHome={onHome} />
         <div className="room-pill"><small>Кімната</small><strong>{state.room.code}</strong></div>
@@ -903,18 +1031,30 @@ function Game({
                   <RoundTimer phaseEndsAt={state.room.phaseEndsAt} />
                 </div>
               </section>
-              <AbilityControls state={state} busy={busy} onUseAbility={onUseAbility} />
               <div className={`table-heading ${["voting", "runoff"].includes(state.room.phase) ? "voting-heading" : ""}`}>
                 <span><small>Кандидати</small><strong>{state.players.filter((player) => player.active).length} активних</strong></span>
-                {["voting", "runoff"].includes(state.room.phase) && (
-                  <em>
-                    {state.you.voteTarget ? "✓ Ваш голос зафіксовано" : "Оберіть кандидата нижче"}
-                    {" · "}Проголосували {votesCast}/{eligibleVoters.length}
-                  </em>
-                )}
+                <div className="table-heading-tools">
+                  {["voting", "runoff"].includes(state.room.phase) && (
+                    <em>
+                      {state.you.voteTarget ? "✓ Ваш голос зафіксовано" : "Оберіть кандидата нижче"}
+                      {" · "}Проголосували {votesCast}/{eligibleVoters.length}
+                    </em>
+                  )}
+                  <DossierScaleControl value={dossierScale} onChange={updateDossierScale} />
+                </div>
               </div>
               <div className="player-grid">
-                {state.players.map((player) => <PlayerCard key={player.id} player={player} state={state} onReveal={onReveal} onVote={onVote} busy={busy} />)}
+                {state.players.map((player) => (
+                  <PlayerCard
+                    key={player.id}
+                    player={player}
+                    state={state}
+                    onReveal={onReveal}
+                    onVote={onVote}
+                    onUseAbility={onUseAbility}
+                    busy={busy}
+                  />
+                ))}
               </div>
             </>
           )}
