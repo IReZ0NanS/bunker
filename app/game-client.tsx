@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
 
 type Session = { code: string; playerId: string; token: string };
 type Card = {
@@ -77,6 +77,34 @@ type GameState = {
 };
 
 const sessionKey = "bunker-protocol-session";
+const dossierScaleKey = "bunker-protocol-dossier-scale";
+const dossierScaleEvent = "bunker-protocol-dossier-scale-change";
+let dossierScaleFallback = 100;
+
+function readDossierScale() {
+  if (typeof window === "undefined") return 100;
+  try {
+    const savedScale = Number(localStorage.getItem(dossierScaleKey));
+    if (Number.isFinite(savedScale) && savedScale >= 80 && savedScale <= 125) {
+      dossierScaleFallback = savedScale;
+    }
+  } catch {
+    // Use the in-memory preference when device storage is unavailable.
+  }
+  return dossierScaleFallback;
+}
+
+function subscribeToDossierScale(callback: () => void) {
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === dossierScaleKey) callback();
+  };
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(dossierScaleEvent, callback);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(dossierScaleEvent, callback);
+  };
+}
 
 const phaseCopy: Record<string, { eyebrow: string; title: string; hint: string }> = {
   briefing: { eyebrow: "Вхідні дані", title: "Оцініть загрозу", hint: "Система готує досьє та відкриває умови експедиції." },
@@ -830,6 +858,69 @@ function RoundTimer({ phaseEndsAt }: { phaseEndsAt: number | null }) {
   );
 }
 
+function DossierScaleControl({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const presets = [
+    { value: 85, label: "Компактно" },
+    { value: 100, label: "Стандарт" },
+    { value: 115, label: "Збільшено" },
+  ];
+  return (
+    <details className="dossier-scale-control">
+      <summary>
+        <span aria-hidden="true">⚙</span>
+        Масштаб карток
+        <b>{value}%</b>
+      </summary>
+      <div className="dossier-scale-popover">
+        <div className="scale-popover-heading">
+          <span><small>Вигляд досьє</small><strong>Розмір карток і тексту</strong></span>
+          <output>{value}%</output>
+        </div>
+        <label className="dossier-scale-range">
+          <span>Менше</span>
+          <input
+            type="range"
+            min="80"
+            max="125"
+            step="5"
+            value={value}
+            aria-label="Масштаб карток гравців"
+            onChange={(event) => onChange(Number(event.target.value))}
+          />
+          <span>Більше</span>
+        </label>
+        <div className="dossier-scale-presets" aria-label="Готові розміри карток">
+          {presets.map((preset) => (
+            <button
+              type="button"
+              key={preset.value}
+              className={value === preset.value ? "active" : ""}
+              onClick={() => onChange(preset.value)}
+            >
+              <span>{preset.label}</span>
+              <b>{preset.value}%</b>
+            </button>
+          ))}
+        </div>
+        <p>Сітка автоматично перебудується — картки не перекриватимуть одна одну.</p>
+        <button
+          type="button"
+          className="scale-popover-done"
+          onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")}
+        >
+          Готово
+        </button>
+      </div>
+    </details>
+  );
+}
+
 function Game({
   state,
   busy,
@@ -885,8 +976,22 @@ function Game({
     ? state.players
     : state.players.filter((player) => player.active);
   const votesCast = eligibleVoters.filter((player) => player.hasVoted).length;
+  const dossierScale = useSyncExternalStore(subscribeToDossierScale, readDossierScale, () => 100);
+  const updateDossierScale = (nextValue: number) => {
+    const safeValue = Math.min(125, Math.max(80, Math.round(nextValue / 5) * 5));
+    dossierScaleFallback = safeValue;
+    try {
+      localStorage.setItem(dossierScaleKey, String(safeValue));
+    } catch {
+      // The visual preference still applies for the current session.
+    }
+    window.dispatchEvent(new Event(dossierScaleEvent));
+  };
+  const dossierStyle = {
+    "--dossier-scale": dossierScale / 100,
+  } as CSSProperties;
   return (
-    <main className={`game-shell phase-${state.room.phase}`}>
+    <main className={`game-shell phase-${state.room.phase}`} style={dossierStyle}>
       <header className="game-header">
         <Logo onHome={onHome} />
         <div className="room-pill"><small>Кімната</small><strong>{state.room.code}</strong></div>
@@ -928,12 +1033,15 @@ function Game({
               </section>
               <div className={`table-heading ${["voting", "runoff"].includes(state.room.phase) ? "voting-heading" : ""}`}>
                 <span><small>Кандидати</small><strong>{state.players.filter((player) => player.active).length} активних</strong></span>
-                {["voting", "runoff"].includes(state.room.phase) && (
-                  <em>
-                    {state.you.voteTarget ? "✓ Ваш голос зафіксовано" : "Оберіть кандидата нижче"}
-                    {" · "}Проголосували {votesCast}/{eligibleVoters.length}
-                  </em>
-                )}
+                <div className="table-heading-tools">
+                  {["voting", "runoff"].includes(state.room.phase) && (
+                    <em>
+                      {state.you.voteTarget ? "✓ Ваш голос зафіксовано" : "Оберіть кандидата нижче"}
+                      {" · "}Проголосували {votesCast}/{eligibleVoters.length}
+                    </em>
+                  )}
+                  <DossierScaleControl value={dossierScale} onChange={updateDossierScale} />
+                </div>
               </div>
               <div className="player-grid">
                 {state.players.map((player) => (
