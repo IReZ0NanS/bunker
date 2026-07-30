@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore,
 import { createPortal } from "react-dom";
 
 type Session = { code: string; playerId: string; token: string };
-type GameViewMode = "classic" | "tactical" | "dossier";
+type SiteTheme = "command" | "ember" | "biosphere";
 type Card = {
   category: string;
   label: string;
@@ -81,10 +81,10 @@ type GameState = {
 const sessionKey = "bunker-protocol-session";
 const dossierScaleKey = "bunker-protocol-dossier-scale";
 const dossierScaleEvent = "bunker-protocol-dossier-scale-change";
-const gameViewModeKey = "bunker-protocol-view-mode";
-const gameViewModeEvent = "bunker-protocol-view-mode-change";
+const siteThemeKey = "bunker-protocol-theme";
+const siteThemeEvent = "bunker-protocol-theme-change";
 let dossierScaleFallback = 100;
-let gameViewModeFallback: GameViewMode = "dossier";
+let siteThemeFallback: SiteTheme = "command";
 
 function readDossierScale() {
   if (typeof window === "undefined") return 100;
@@ -111,29 +111,39 @@ function subscribeToDossierScale(callback: () => void) {
   };
 }
 
-function readGameViewMode() {
-  if (typeof window === "undefined") return "dossier";
+function readSiteTheme() {
+  if (typeof window === "undefined") return "command";
   try {
-    const savedMode = localStorage.getItem(gameViewModeKey);
-    if (savedMode === "classic" || savedMode === "tactical" || savedMode === "dossier") {
-      gameViewModeFallback = savedMode;
+    const savedTheme = localStorage.getItem(siteThemeKey);
+    if (savedTheme === "command" || savedTheme === "ember" || savedTheme === "biosphere") {
+      siteThemeFallback = savedTheme;
     }
   } catch {
     // Use the in-memory preference when device storage is unavailable.
   }
-  return gameViewModeFallback;
+  return siteThemeFallback;
 }
 
-function subscribeToGameViewMode(callback: () => void) {
+function subscribeToSiteTheme(callback: () => void) {
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === gameViewModeKey) callback();
+    if (event.key === siteThemeKey) callback();
   };
   window.addEventListener("storage", handleStorage);
-  window.addEventListener(gameViewModeEvent, callback);
+  window.addEventListener(siteThemeEvent, callback);
   return () => {
     window.removeEventListener("storage", handleStorage);
-    window.removeEventListener(gameViewModeEvent, callback);
+    window.removeEventListener(siteThemeEvent, callback);
   };
+}
+
+function writeSiteTheme(nextTheme: SiteTheme) {
+  siteThemeFallback = nextTheme;
+  try {
+    localStorage.setItem(siteThemeKey, nextTheme);
+  } catch {
+    // Keep the selected palette for this session.
+  }
+  window.dispatchEvent(new Event(siteThemeEvent));
 }
 
 const phaseCopy: Record<string, { eyebrow: string; title: string; hint: string }> = {
@@ -296,6 +306,46 @@ function Logo({ onHome }: { onHome?: () => void }) {
   ) : <div className="brand" aria-label="Бункер: Протокол">{content}</div>;
 }
 
+function ThemeSwitcher() {
+  const theme = useSyncExternalStore(subscribeToSiteTheme, readSiteTheme, () => "command");
+  const themes: { value: SiteTheme; label: string; hint: string }[] = [
+    { value: "command", label: "Командний", hint: "Холодний блакитний" },
+    { value: "ember", label: "Аварійний", hint: "Бурштин і жар" },
+    { value: "biosphere", label: "Біосфера", hint: "Зелений сектор" },
+  ];
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+  const selectedTheme = themes.find((item) => item.value === theme) ?? themes[0];
+  return (
+    <details className="theme-switcher">
+      <summary aria-label={`Тема інтерфейсу: ${selectedTheme.label}`}>
+        <span className={`theme-swatch swatch-${theme}`} aria-hidden="true" />
+        <span><small>Тема</small><strong>{selectedTheme.label}</strong></span>
+      </summary>
+      <div className="theme-popover" role="group" aria-label="Кольорова тема сайту">
+        <small>Кольорова атмосфера</small>
+        {themes.map((item) => (
+          <button
+            type="button"
+            key={item.value}
+            className={theme === item.value ? "active" : ""}
+            aria-pressed={theme === item.value}
+            onClick={(event) => {
+              writeSiteTheme(item.value);
+              event.currentTarget.closest("details")?.removeAttribute("open");
+            }}
+          >
+            <span className={`theme-swatch swatch-${item.value}`} aria-hidden="true" />
+            <span><strong>{item.label}</strong><small>{item.hint}</small></span>
+            <b aria-hidden="true">{theme === item.value ? "✓" : ""}</b>
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function Toggle({
   checked,
   onChange,
@@ -391,7 +441,10 @@ function Landing({
       <div className="landing-noise" />
       <header className="landing-header">
         <Logo />
-        <div className="system-status"><span /> Система онлайн</div>
+        <div className="landing-header-tools">
+          <ThemeSwitcher />
+          <div className="system-status"><span /> Система онлайн</div>
+        </div>
       </header>
       <section className="landing-copy">
         <div className="kicker"><span>01</span> Автономна соціальна гра</div>
@@ -545,7 +598,10 @@ function Lobby({
     <main className="lobby-shell">
       <header className="game-header">
         <Logo onHome={onHome} />
-        <button className="quiet-button" onClick={onLeave}>Вийти</button>
+        <div className="header-actions">
+          <ThemeSwitcher />
+          <button className="quiet-button" onClick={onLeave}>Вийти</button>
+        </div>
       </header>
       <section className="lobby-intro">
         <div className="kicker"><span>02</span> Збір групи</div>
@@ -702,8 +758,6 @@ function ScenarioCard({
 function PlayerCard({
   player,
   state,
-  viewMode,
-  orbitStyle,
   onReveal,
   onVote,
   onUseAbility,
@@ -711,8 +765,6 @@ function PlayerCard({
 }: {
   player: Player;
   state: GameState;
-  viewMode: GameViewMode;
-  orbitStyle?: CSSProperties;
   onReveal: (category: string) => void;
   onVote: (id: string) => void;
   onUseAbility: (payload: Record<string, unknown>) => void;
@@ -735,20 +787,11 @@ function PlayerCard({
     ["voting", "runoff"].includes(state.room.phase) &&
     player.active &&
     (state.room.phase !== "runoff" || state.room.runoff.includes(player.id));
-  const compactBallot =
-    viewMode === "tactical" &&
-    ["voting", "runoff"].includes(state.room.phase) &&
-    !player.isYou;
-  const displayedCategories = compactBallot
-    ? profileCategories.filter(([category]) => player.revealed.some((card) => card.category === category))
-    : profileCategories;
-  const classifiedCount = profileCategories.length - displayedCategories.length;
   return (
     <article
-      className={`player-card ${compactBallot ? "compact-ballot" : ""} ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}
-      style={orbitStyle}
-      tabIndex={viewMode === "dossier" ? 0 : undefined}
-      aria-label={viewMode === "dossier" ? `Досьє гравця ${player.name}. Наведіть або натисніть, щоб збільшити.` : undefined}
+      className={`player-card ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}
+      tabIndex={0}
+      aria-label={`Досьє гравця ${player.name}. Наведіть або сфокусуйте картку, щоб збільшити.`}
     >
       <div className="player-topline">
         <span className={`avatar small ${player.isBot ? "bot-avatar" : ""}`}>{player.isBot ? "AI" : player.name.slice(0, 1).toUpperCase()}</span>
@@ -761,7 +804,7 @@ function PlayerCard({
         {player.hasVoted && ["voting", "runoff"].includes(state.room.phase) && <span className="effect-voted">Проголосував</span>}
       </div>
       <div className="player-profile-list">
-        {displayedCategories.map(([category, label]) => {
+        {profileCategories.map(([category, label]) => {
           const publicCard = player.revealed.find((card) => card.category === category);
           const privateCard = privateCards.find((card) => card.category === category);
           const card = privateCard ?? publicCard;
@@ -788,12 +831,6 @@ function PlayerCard({
             </div>
           );
         })}
-        {compactBallot && classifiedCount > 0 && (
-          <div className="classified-summary" aria-label={`${classifiedCount} характеристик ще не відкрито`}>
-            <span>Закрита частина досьє</span>
-            <strong>{classifiedCount}</strong>
-          </div>
-        )}
         <PlayerAbilityCard
           player={player}
           state={state}
@@ -1008,93 +1045,6 @@ function DossierScaleControl({
   );
 }
 
-function ViewModeControl({
-  value,
-  onChange,
-}: {
-  value: GameViewMode;
-  onChange: (value: GameViewMode) => void;
-}) {
-  return (
-    <div className="view-mode-control" role="group" aria-label="Режим ігрового поля">
-      <button
-        type="button"
-        className={value === "classic" ? "active" : ""}
-        aria-pressed={value === "classic"}
-        onClick={() => onChange("classic")}
-      >
-        Класичний
-      </button>
-      <button
-        type="button"
-        className={value === "tactical" ? "active" : ""}
-        aria-pressed={value === "tactical"}
-        onClick={() => onChange("tactical")}
-      >
-        Тактичний
-      </button>
-      <button
-        type="button"
-        className={value === "dossier" ? "active" : ""}
-        aria-pressed={value === "dossier"}
-        onClick={() => onChange("dossier")}
-      >
-        Живе досьє
-        <span>Новий</span>
-      </button>
-    </div>
-  );
-}
-
-function PhaseProgress({ phase, round }: { phase: string; round: number }) {
-  const steps = [
-    { key: "briefing", label: "Умови" },
-    { key: "reveal", label: "Досьє" },
-    { key: "discussion", label: "Дискусія" },
-    { key: "voting", label: "Вибір" },
-  ];
-  const normalizedPhase = phase === "runoff" || phase === "finished" ? "voting" : phase;
-  const activeIndex = Math.max(0, steps.findIndex((step) => step.key === normalizedPhase));
-  return (
-    <ol className="phase-progress" aria-label={`Прогрес раунду ${round}`}>
-      {steps.map((step, index) => (
-        <li
-          key={step.key}
-          className={`${index < activeIndex ? "complete" : ""} ${index === activeIndex ? "active" : ""}`}
-          aria-current={index === activeIndex ? "step" : undefined}
-        >
-          <span>{index < activeIndex ? "✓" : index + 1}</span>
-          {step.label}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function DossierTableCenter({
-  state,
-  phaseTitle,
-  turnPlayer,
-}: {
-  state: GameState;
-  phaseTitle: string;
-  turnPlayer: Player | undefined;
-}) {
-  return (
-    <section className="dossier-table-center" aria-label="Центр ігрового столу">
-      <div className="table-center-seal" aria-hidden="true"><span>БП</span></div>
-      <small>Бункер · протокол {String(state.room.round).padStart(2, "0")}</small>
-      <strong>{phaseTitle}</strong>
-      <p>{turnPlayer ? `${turnPlayer.isYou ? "Ваш хід" : `Говорить ${turnPlayer.name}`}` : "Рішення приймає група"}</p>
-      <div className="table-center-scenarios">
-        <span><i />{state.room.catastrophe?.title ?? "Катастрофа"}</span>
-        <span><i />{state.room.bunker?.title ?? "Бункер"}</span>
-        <span><i />{state.room.outside?.title ?? "Поверхня"}</span>
-      </div>
-    </section>
-  );
-}
-
 function Game({
   state,
   busy,
@@ -1116,17 +1066,6 @@ function Game({
   onHome: () => void;
   onLeave: () => void;
 }) {
-  const [conditionsExpanded, setConditionsExpanded] = useState(false);
-  const viewMode = useSyncExternalStore(subscribeToGameViewMode, readGameViewMode, () => "dossier");
-  const updateViewMode = (nextMode: GameViewMode) => {
-    gameViewModeFallback = nextMode;
-    try {
-      localStorage.setItem(gameViewModeKey, nextMode);
-    } catch {
-      // Keep the preference for this session.
-    }
-    window.dispatchEvent(new Event(gameViewModeEvent));
-  };
   const phase =
     state.room.round === 1 && state.room.phase === "discussion"
       ? {
@@ -1175,48 +1114,30 @@ function Game({
   const dossierStyle = {
     "--dossier-scale": dossierScale / 100,
   } as CSSProperties;
-  const yourPlayer = state.players.find((player) => player.isYou);
-  const orderedPlayers =
-    viewMode === "dossier" && yourPlayer
-      ? [yourPlayer, ...state.players.filter((player) => player.id !== yourPlayer.id)]
-      : viewMode === "tactical" && state.room.phase === "reveal" && turnPlayer
-        ? [turnPlayer, ...state.players.filter((player) => player.id !== turnPlayer.id)]
-        : state.players;
   return (
-    <main className={`game-shell view-${viewMode} phase-${state.room.phase}`} style={dossierStyle}>
+    <main className={`game-shell phase-${state.room.phase}`} style={dossierStyle}>
       <header className="game-header">
         <Logo onHome={onHome} />
         <div className="room-pill"><small>Кімната</small><strong>{state.room.code}</strong></div>
         <div className="game-meta">
           <span><small>Раунд</small><strong>{String(state.room.round).padStart(2, "0")}</strong></span>
           <span><small>У бункері</small><strong>{state.players.filter((player) => player.active).length}/{state.room.seats}</strong></span>
+          <ThemeSwitcher />
           <button className="quiet-button" onClick={onLeave}>Вийти</button>
         </div>
       </header>
 
       <section className="phase-bar">
         <div className="phase-copy"><small>{phase.eyebrow}</small><h1>{phase.title}</h1><p>{phase.hint}</p></div>
-        <PhaseProgress phase={state.room.phase} round={state.room.round} />
       </section>
 
       <div className="game-layout">
         <section className="table-panel">
           {state.room.status === "finished" ? <Finished state={state} /> : (
             <>
-              <section className={`scenario-strip ${conditionsExpanded ? "expanded" : "collapsed"}`} aria-label="Умови виживання">
+              <section className="scenario-strip" aria-label="Умови виживання">
                 <div className="scenario-strip-heading">
                   <span><small>Умови виживання</small><strong>Катастрофа · бункер · поверхня</strong></span>
-                  {viewMode !== "classic" && (
-                    <button
-                      type="button"
-                      className="scenario-toggle"
-                      aria-expanded={conditionsExpanded}
-                      onClick={() => setConditionsExpanded((current) => !current)}
-                    >
-                      {conditionsExpanded ? "Згорнути умови" : "Розгорнути умови"}
-                      <span aria-hidden="true">{conditionsExpanded ? "↑" : "↓"}</span>
-                    </button>
-                  )}
                 </div>
                 <div className="scenario-stack">
                   <ScenarioCard number="01" label="Катастрофа" scenario={state.room.catastrophe} variant="catastrophe" />
@@ -1246,36 +1167,21 @@ function Game({
                       {" · "}Проголосували {votesCast}/{eligibleVoters.length}
                     </em>
                   )}
-                  <ViewModeControl value={viewMode} onChange={updateViewMode} />
                   <DossierScaleControl value={dossierScale} onChange={updateDossierScale} />
                 </div>
               </div>
               <div className="player-grid">
-                {viewMode === "dossier" && (
-                  <DossierTableCenter state={state} phaseTitle={phase.title} turnPlayer={turnPlayer} />
-                )}
-                {orderedPlayers.map((player, index) => {
-                  const angle = Math.PI / 2 + (index / Math.max(1, orderedPlayers.length)) * Math.PI * 2;
-                  const orbitStyle = viewMode === "dossier"
-                    ? {
-                        "--orbit-left": `${50 + Math.cos(angle) * 38}%`,
-                        "--orbit-top": `${50 + Math.sin(angle) * 30}%`,
-                      } as CSSProperties
-                    : undefined;
-                  return (
-                    <PlayerCard
-                      key={player.id}
-                      player={player}
-                      state={state}
-                      viewMode={viewMode}
-                      orbitStyle={orbitStyle}
-                      onReveal={onReveal}
-                      onVote={onVote}
-                      onUseAbility={onUseAbility}
-                      busy={busy}
-                    />
-                  );
-                })}
+                {state.players.map((player) => (
+                  <PlayerCard
+                    key={player.id}
+                    player={player}
+                    state={state}
+                    onReveal={onReveal}
+                    onVote={onVote}
+                    onUseAbility={onUseAbility}
+                    busy={busy}
+                  />
+                ))}
               </div>
             </>
           )}

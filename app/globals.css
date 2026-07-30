@@ -3812,1174 +3812,405 @@ input::placeholder {
   font-weight: 760;
 }
 
-/* Option B: phase-aware tactical game board. */
-.phase-progress {
-  display: none;
+/* One classic board: hover magnification without changing the grid geometry. */
+.game-shell .player-grid {
+  isolation: isolate;
 }
 
-.view-mode-control {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: stretch;
+.game-shell .player-card {
+  transform-origin: center;
+}
+
+.game-shell .player-card:focus-visible {
+  z-index: 160;
+  outline: 3px solid var(--color-action);
+  outline-offset: 4px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .game-shell .player-card:hover,
+  .game-shell .player-card:focus-within {
+    z-index: 160;
+    content-visibility: visible;
+    border-color: rgba(99, 213, 255, .7);
+    box-shadow:
+      0 calc(28px * var(--dossier-scale)) calc(68px * var(--dossier-scale)) rgba(0, 0, 0, .55),
+      0 0 0 2px rgba(99, 213, 255, .12),
+      inset 0 1px rgba(255, 255, 255, .05);
+    transform: translateY(calc(-5px * var(--dossier-scale))) scale(1.065);
+  }
+
+  .game-shell.phase-voting .player-card:hover,
+  .game-shell.phase-voting .player-card:focus-within,
+  .game-shell.phase-runoff .player-card:hover,
+  .game-shell.phase-runoff .player-card:focus-within {
+    border-color: rgba(255, 124, 138, .72);
+    box-shadow:
+      0 calc(24px * var(--dossier-scale)) calc(56px * var(--dossier-scale)) rgba(0, 0, 0, .52),
+      0 0 0 2px rgba(255, 124, 138, .14);
+    transform: translateY(calc(-3px * var(--dossier-scale))) scale(1.035);
+  }
+
+  .game-shell .player-card.excluded:hover,
+  .game-shell .player-card.excluded:focus-within {
+    opacity: .82;
+  }
+}
+
+/* Atmospheric color themes shared by landing, lobby and game screens. */
+.landing-header-tools,
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.theme-switcher {
+  position: relative;
+  z-index: 320;
   flex: none;
-  padding: 3px;
-  border: 1px solid rgba(178, 204, 230, .3);
-  border-radius: 9px;
-  background: rgba(5, 14, 23, .56);
 }
 
-.view-mode-control button {
-  min-height: 32px;
-  display: inline-flex;
+.theme-switcher > summary {
+  min-height: 42px;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
   padding: 6px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #9eb0c2;
-  cursor: pointer;
-  font-size: 10px;
-  font-weight: 780;
-}
-
-.view-mode-control button:hover {
-  color: #e8f6ff;
-}
-
-.view-mode-control button.active {
-  background: rgba(99, 213, 255, .18);
-  color: #d8f6ff;
-  box-shadow: inset 0 0 0 1px rgba(99, 213, 255, .36);
-}
-
-.view-mode-control button span {
-  padding: 3px 5px;
-  border-radius: 999px;
-  background: var(--color-success);
-  color: #072219;
-  font-size: 7px;
-  font-weight: 900;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-}
-
-.scenario-strip-heading > span {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.scenario-toggle {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  padding: 7px 11px;
-  border: 1px solid rgba(99, 213, 255, .34);
+  border: 1px solid rgba(178, 204, 230, .32);
   border-radius: 8px;
-  background: rgba(99, 213, 255, .07);
-  color: #bceeff;
+  background: rgba(14, 27, 39, .84);
+  color: var(--color-text);
   cursor: pointer;
-  font-size: 10px;
-  font-weight: 780;
-}
-
-.scenario-toggle:hover {
-  border-color: rgba(99, 213, 255, .62);
-  background: rgba(99, 213, 255, .14);
-}
-
-.scenario-toggle > span {
-  font-size: 14px;
-}
-
-.classified-summary {
-  min-height: calc(38px * var(--dossier-scale));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: calc(7px * var(--dossier-scale)) calc(10px * var(--dossier-scale));
-  border-bottom: 1px solid rgba(178, 204, 230, .12);
-  background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(112, 132, 153, .025) 0 7px,
-      rgba(112, 132, 153, .065) 7px 8px
-    );
-  color: #8395a8;
-}
-
-.classified-summary span {
-  font-size: max(9px, calc(9px * var(--dossier-scale)));
-  font-weight: 760;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.classified-summary strong {
-  min-width: 26px;
-  min-height: 24px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(178, 204, 230, .22);
-  border-radius: 999px;
-  color: #b8c6d4;
-  font-size: 11px;
-}
-
-.view-tactical .phase-bar {
-  min-height: 102px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(390px, 520px);
-  align-items: center;
-  gap: 28px;
-  padding-block: 14px;
-}
-
-.view-tactical .phase-bar::before {
-  display: none;
-}
-
-.view-tactical .phase-bar h1 {
-  margin-block: 4px;
-  font-size: clamp(27px, 2.2vw, 38px);
-}
-
-.view-tactical .phase-bar p {
-  display: none;
-}
-
-.view-tactical .phase-progress {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: 0;
-  padding: 0;
   list-style: none;
 }
 
-.view-tactical .phase-progress li {
-  position: relative;
-  min-width: 0;
-  display: grid;
-  justify-items: center;
-  gap: 7px;
-  color: #71869a;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-}
-
-.view-tactical .phase-progress li::before {
-  content: "";
-  position: absolute;
-  top: 14px;
-  right: 50%;
-  left: -50%;
-  height: 2px;
-  background: rgba(178, 204, 230, .17);
-}
-
-.view-tactical .phase-progress li:first-child::before {
+.theme-switcher > summary::-webkit-details-marker {
   display: none;
 }
 
-.view-tactical .phase-progress li > span {
-  position: relative;
-  z-index: 1;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(178, 204, 230, .24);
-  border-radius: 50%;
-  background: #0b1926;
-  color: #8fa3b6;
-  font-size: 10px;
-}
-
-.view-tactical .phase-progress li.complete,
-.view-tactical .phase-progress li.active {
-  color: #d4e8f4;
-}
-
-.view-tactical .phase-progress li.complete::before,
-.view-tactical .phase-progress li.active::before {
-  background: rgba(99, 213, 255, .62);
-}
-
-.view-tactical .phase-progress li.complete > span {
-  border-color: rgba(112, 229, 173, .64);
-  background: rgba(112, 229, 173, .16);
-  color: #9af0c7;
-}
-
-.view-tactical .phase-progress li.active > span {
+.theme-switcher > summary:hover {
   border-color: var(--color-action);
-  background: var(--color-action);
-  color: var(--color-on-action);
-  box-shadow: 0 0 20px rgba(99, 213, 255, .28);
+  background: rgba(22, 42, 58, .94);
 }
 
-.view-tactical .table-panel {
-  padding-top: 14px;
-}
-
-.view-tactical .scenario-strip {
-  margin-bottom: 12px;
-}
-
-.view-tactical .scenario-strip-heading {
-  min-height: 40px;
-  margin-bottom: 7px;
-}
-
-.view-tactical .scenario-stack {
-  gap: 9px;
-}
-
-.view-tactical .scenario-card {
-  transition: min-height .2s ease, padding .2s ease;
-}
-
-.view-tactical .scenario-strip.collapsed .scenario-card {
-  min-height: 82px;
-  padding-block: 12px;
-}
-
-.view-tactical .scenario-strip.collapsed .scenario-card .scenario-body p,
-.view-tactical .scenario-strip.collapsed .scenario-card .scenario-body ul {
-  display: none;
-}
-
-.view-tactical .scenario-strip.collapsed .scenario-card .scenario-body h3 {
-  margin-bottom: 0;
-  font-size: clamp(14px, 1vw, 18px);
-}
-
-.view-tactical .round-control-dock {
-  top: 6px;
-  min-height: 66px;
-  margin-bottom: 12px;
-  border-color: rgba(99, 213, 255, .6);
-  background: linear-gradient(110deg, #132d40, #0b1d2c);
-}
-
-.view-tactical .table-heading {
-  min-height: 52px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-}
-
-.view-tactical .player-grid {
-  align-items: start;
-  gap: calc(12px * var(--dossier-scale));
-}
-
-.view-tactical.phase-reveal .player-card.current {
-  grid-column: span 2;
-  order: -1;
-  border-color: var(--color-success);
-  box-shadow:
-    0 0 0 1px rgba(112, 229, 173, .22),
-    0 24px 56px rgba(5, 54, 47, .34);
-}
-
-.view-tactical.phase-reveal .player-card.current .player-topline strong {
-  font-size: calc(16px * var(--dossier-scale));
-}
-
-.view-tactical.phase-discussion .profile-row.public {
-  box-shadow:
-    inset 3px 0 rgba(112, 229, 173, .86),
-    inset 0 0 0 1px rgba(112, 229, 173, .07);
-}
-
-.view-tactical.phase-voting .player-card.compact-ballot,
-.view-tactical.phase-runoff .player-card.compact-ballot {
-  min-height: 0;
-}
-
-.view-tactical.phase-voting .player-effects:empty,
-.view-tactical.phase-runoff .player-effects:empty {
-  min-height: 8px;
-  margin-top: 3px;
-}
-
-.view-tactical.phase-voting .player-card:not(.excluded),
-.view-tactical.phase-runoff .player-card:not(.excluded) {
-  border-color: rgba(255, 124, 138, .34);
-}
-
-.view-tactical.phase-voting .vote-button,
-.view-tactical.phase-runoff .vote-button {
-  min-height: 46px;
-  margin-top: 12px;
-}
-
-@media (max-width: 1120px) {
-  .view-tactical .phase-bar {
-    grid-template-columns: minmax(0, 1fr) minmax(330px, 430px);
-  }
-
-  .view-tactical.phase-reveal .player-card.current {
-    grid-column: span 1;
-  }
-}
-
-@media (max-width: 760px) {
-  .term-tooltip-portal {
-    top: auto !important;
-    right: 12px;
-    bottom: 12px;
-    left: 12px !important;
-    width: auto !important;
-    transform: none !important;
-  }
-
-  .view-tactical .phase-bar {
-    min-height: 0;
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .view-tactical .phase-progress {
-    width: 100%;
-  }
-
-  .view-tactical .phase-progress li {
-    font-size: 8px;
-  }
-
-  .view-tactical .scenario-strip-heading {
-    align-items: center;
-  }
-
-  .view-tactical .scenario-strip-heading > span strong {
-    display: none;
-  }
-
-  .scenario-toggle {
-    min-height: 44px;
-    padding-inline: 10px;
-    font-size: 9px;
-  }
-
-  .view-tactical .scenario-stack {
-    grid-template-columns: repeat(3, minmax(150px, 1fr));
-    overflow-x: auto;
-    padding-bottom: 6px;
-  }
-
-  .view-mode-control {
-    min-height: 44px;
-  }
-
-  .view-mode-control button {
-    min-height: 36px;
-    padding-inline: 9px;
-  }
-
-  .table-heading-tools {
-    width: 100%;
-    align-items: stretch;
-  }
-
-  .view-tactical .table-heading {
-    display: grid;
-  }
-
-  .view-tactical .table-heading-tools {
-    flex-flow: row wrap;
-    justify-content: flex-start;
-  }
-
-  .view-tactical .table-heading-tools > em {
-    width: 100%;
-    max-width: none;
-    text-align: left;
-  }
-}
-
-/* Living dossier: a phase-aware table with player seats arranged around it. */
-.view-dossier {
-  --dossier-table-ink: #f0e9d7;
-  --dossier-table-muted: #aaa38e;
-  --dossier-table-line: rgba(193, 165, 105, .38);
-  --dossier-table-brass: #c0a466;
-  --dossier-table-green: #76c69b;
-  --dossier-table-red: #d86f6f;
-  --dossier-table-blue: #75bed0;
-  --circle-card-width: clamp(320px, 18vw, 520px);
-  background:
-    radial-gradient(ellipse at 50% 48%, rgba(32, 68, 51, .28), transparent 42%),
-    linear-gradient(180deg, #070b0a, #0b1110 42%, #070a09);
-  color: var(--dossier-table-ink);
-  font-family: var(--font-manrope), sans-serif;
-}
-
-.view-dossier .game-header {
-  border-bottom: 1px solid rgba(193, 165, 105, .32);
-  background:
-    linear-gradient(90deg, rgba(31, 37, 32, .98), rgba(10, 17, 15, .99));
-  box-shadow: 0 12px 34px rgba(0, 0, 0, .28);
-}
-
-.view-dossier .brand-mark {
-  border-color: rgba(193, 165, 105, .5);
-  border-radius: 4px;
-  background: rgba(193, 165, 105, .07);
-  color: #e4cd99;
-  box-shadow: inset 0 0 0 1px rgba(255, 245, 215, .04);
-}
-
-.view-dossier .brand-copy strong,
-.view-dossier .room-pill strong,
-.view-dossier .game-meta strong {
-  color: #f2ead7;
-}
-
-.view-dossier .room-pill {
-  border-left-color: rgba(193, 165, 105, .3);
-}
-
-.view-dossier .room-pill small,
-.view-dossier .game-meta small {
-  color: #aaa48e;
-}
-
-.view-dossier .phase-bar {
-  min-height: 96px;
-  padding-block: 14px;
-  border-bottom: 1px solid rgba(193, 165, 105, .3);
-  background:
-    linear-gradient(105deg, rgba(41, 49, 40, .98), rgba(13, 24, 20, .98));
-}
-
-.view-dossier .phase-bar::before {
-  width: 3px;
-  background: var(--dossier-table-brass);
-  box-shadow: none;
-}
-
-.view-dossier .phase-bar::after {
-  background:
-    linear-gradient(90deg, rgba(193, 165, 105, .04) 1px, transparent 1px),
-    linear-gradient(rgba(193, 165, 105, .025) 1px, transparent 1px);
-  background-size: 42px 42px;
-}
-
-.view-dossier .phase-bar small,
-.view-dossier .scenario-strip-heading small,
-.view-dossier .table-heading small {
-  color: #d2b873;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  letter-spacing: .16em;
-}
-
-.view-dossier .phase-bar h1 {
-  margin-block: 5px;
-  color: #f2ead7;
-  font-family: var(--font-oswald), sans-serif;
-  font-size: clamp(30px, 2.8vw, 44px);
-  font-weight: 500;
-  letter-spacing: .035em;
-  text-transform: uppercase;
-  text-shadow: 0 4px 20px rgba(0, 0, 0, .34);
-}
-
-.view-dossier .phase-bar p {
-  color: #b7b3a3;
-}
-
-.view-dossier .table-panel {
-  padding-top: 16px;
-  background:
-    radial-gradient(circle at 50% 38%, rgba(50, 82, 63, .08), transparent 32%);
-}
-
-.view-dossier .scenario-strip {
-  margin-bottom: 12px;
-}
-
-.view-dossier .scenario-strip-heading {
-  min-height: 42px;
-  margin-bottom: 7px;
-}
-
-.view-dossier .scenario-strip-heading strong {
-  color: #aaa38e;
-}
-
-.view-dossier .scenario-toggle {
-  border-color: rgba(193, 165, 105, .42);
-  border-radius: 4px;
-  background: rgba(193, 165, 105, .08);
-  color: #e0c987;
-}
-
-.view-dossier .scenario-toggle:hover {
-  border-color: rgba(224, 201, 135, .7);
-  background: rgba(193, 165, 105, .15);
-}
-
-.view-dossier .scenario-stack {
-  gap: 10px;
-}
-
-.view-dossier .scenario-card {
-  border-color: rgba(193, 165, 105, .34);
-  border-radius: 5px;
-  background-color: #121814;
-  box-shadow:
-    0 12px 28px rgba(0, 0, 0, .22),
-    inset 0 0 0 1px rgba(244, 229, 190, .025);
-}
-
-.view-dossier .scenario-card::before {
-  background:
-    linear-gradient(90deg, rgba(11, 16, 13, .98), rgba(13, 20, 16, .86) 65%, rgba(13, 20, 16, .58)),
-    linear-gradient(0deg, rgba(8, 13, 10, .9), transparent 72%);
-}
-
-.view-dossier .scenario-card .scenario-body small {
-  color: #c0a96d;
-}
-
-.view-dossier .scenario-card .scenario-body h3 {
-  color: #f0e9d7;
-  font-family: var(--font-oswald), sans-serif;
-  font-weight: 500;
-  letter-spacing: .02em;
-}
-
-.view-dossier .scenario-card .scenario-body p,
-.view-dossier .scenario-card .scenario-body li {
-  color: #c1bcad;
-}
-
-.view-dossier .scenario-strip.collapsed .scenario-card {
-  min-height: 84px;
-  padding-block: 12px;
-}
-
-.view-dossier .scenario-strip.collapsed .scenario-card .scenario-body p,
-.view-dossier .scenario-strip.collapsed .scenario-card .scenario-body ul {
-  display: none;
-}
-
-.view-dossier .scenario-strip.collapsed .scenario-card .scenario-body h3 {
-  margin-bottom: 0;
-  font-size: clamp(14px, 1vw, 18px);
-}
-
-.view-dossier .round-control-dock {
-  top: 6px;
-  min-height: 66px;
-  margin-bottom: 12px;
-  border-color: rgba(193, 165, 105, .54);
-  border-radius: 6px;
-  background:
-    linear-gradient(100deg, rgba(33, 44, 36, .99), rgba(12, 23, 19, .99));
-  box-shadow:
-    0 14px 32px rgba(0, 0, 0, .28),
-    inset 3px 0 var(--dossier-table-brass);
-}
-
-.view-dossier .control-round {
-  border-right-color: rgba(193, 165, 105, .34);
-  color: #d7bd77;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-}
-
-.view-dossier .round-control-status strong {
-  color: #f3ecdb;
-}
-
-.view-dossier .round-control-status small {
-  color: #aaa797;
-}
-
-.view-dossier .pass-turn-button,
-.view-dossier .host-phase-button.primary {
-  border-color: #d6bd7d;
-  border-radius: 4px;
-  background: #d6bd7d;
-  color: #17130b;
-  box-shadow: 0 8px 22px rgba(92, 75, 37, .24);
-}
-
-.view-dossier .host-phase-button:not(.primary) {
-  border-color: rgba(193, 165, 105, .5);
-  border-radius: 4px;
-  background: rgba(193, 165, 105, .09);
-  color: #ddc88f;
-}
-
-.view-dossier .timer {
-  border-left-color: rgba(193, 165, 105, .3);
-}
-
-.view-dossier .timer span {
-  color: #f0e3bd;
-  font-family: var(--font-oswald), sans-serif;
-}
-
-.view-dossier .table-heading {
-  min-height: 56px;
-  margin-bottom: 8px;
-  padding: 0 0 10px;
-  border-bottom-color: rgba(193, 165, 105, .24);
-}
-
-.view-dossier .table-heading strong {
-  color: #ede5d3;
-  font-family: var(--font-oswald), sans-serif;
-  font-weight: 500;
-}
-
-.view-dossier .table-heading.voting-heading {
-  border-color: rgba(216, 111, 111, .5);
-  background: rgba(112, 40, 40, .12);
-  box-shadow: inset 3px 0 var(--dossier-table-red);
-}
-
-.view-dossier .view-mode-control,
-.view-dossier .dossier-scale-control > summary {
-  border-color: rgba(193, 165, 105, .38);
-  border-radius: 5px;
-  background: rgba(19, 27, 22, .78);
-  color: #cdbb8a;
-}
-
-.view-dossier .view-mode-control button {
-  border-radius: 3px;
-  color: #aaa48f;
-}
-
-.view-dossier .view-mode-control button:hover {
-  color: #f1e7ce;
-}
-
-.view-dossier .view-mode-control button.active {
-  background: rgba(193, 165, 105, .18);
-  color: #f3e6c2;
-  box-shadow: inset 0 0 0 1px rgba(216, 190, 127, .42);
-}
-
-.view-dossier .view-mode-control button span {
-  background: #d1b86f;
-  color: #1b1609;
-}
-
-.view-dossier .player-grid {
-  position: relative;
-  isolation: isolate;
-  display: block;
-  min-height: clamp(1000px, 70vw, 1900px);
-  overflow: visible;
-  border: 1px solid rgba(193, 165, 105, .13);
-  border-radius: 14px;
-  background:
-    radial-gradient(ellipse at center, rgba(75, 118, 87, .11), transparent 35%),
-    repeating-linear-gradient(90deg, rgba(193, 165, 105, .016) 0 1px, transparent 1px 48px),
-    repeating-linear-gradient(0deg, rgba(193, 165, 105, .012) 0 1px, transparent 1px 48px);
-  box-shadow: inset 0 0 80px rgba(0, 0, 0, .36);
-}
-
-.dossier-table-center {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 1;
-  width: min(46%, 760px);
-  min-height: clamp(260px, 20vw, 430px);
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  padding: 34px 9%;
-  border: 10px solid #302c21;
-  border-radius: 50%;
-  background:
-    radial-gradient(ellipse at 50% 42%, rgba(74, 119, 86, .58), transparent 54%),
-    repeating-radial-gradient(ellipse at center, rgba(227, 208, 158, .025) 0 2px, transparent 2px 9px),
-    #142c22;
-  color: #eee5cf;
-  box-shadow:
-    0 28px 60px rgba(0, 0, 0, .5),
-    0 0 0 2px #8f7950,
-    0 0 0 7px #171914,
-    inset 0 0 60px rgba(0, 0, 0, .48),
-    inset 0 0 0 2px rgba(230, 206, 148, .2);
-  text-align: center;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.dossier-table-center::before,
-.dossier-table-center::after {
-  content: "";
-  position: absolute;
-  inset: 8%;
-  border: 1px solid rgba(220, 194, 129, .16);
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.dossier-table-center::after {
-  inset: 17%;
-  border-style: dashed;
-}
-
-.table-center-seal {
-  position: relative;
-  z-index: 1;
-  width: clamp(52px, 4vw, 74px);
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
-  margin-bottom: 12px;
-  border: 1px solid rgba(224, 201, 135, .7);
-  border-radius: 50%;
-  background: rgba(5, 18, 13, .48);
-  box-shadow:
-    0 0 0 4px rgba(193, 165, 105, .08),
-    inset 0 0 22px rgba(193, 165, 105, .1);
-}
-
-.table-center-seal span {
-  color: #e0c987;
-  font: 500 clamp(18px, 1.8vw, 30px)/1 var(--font-oswald), sans-serif;
-  letter-spacing: .08em;
-}
-
-.dossier-table-center > small {
-  position: relative;
-  z-index: 1;
-  color: #c9b374;
-  font: 700 clamp(8px, .65vw, 11px)/1.3 ui-monospace, "SFMono-Regular", Menlo, monospace;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
-
-.dossier-table-center > strong {
-  position: relative;
-  z-index: 1;
-  max-width: 620px;
-  margin-top: 10px;
-  color: #f0e8d5;
-  font: 500 clamp(24px, 2.2vw, 42px)/1.06 var(--font-oswald), sans-serif;
-  letter-spacing: .025em;
-  text-transform: uppercase;
-}
-
-.dossier-table-center > p {
-  position: relative;
-  z-index: 1;
-  margin: 10px 0 0;
-  color: #c8c1ad;
-  font-size: clamp(10px, .85vw, 14px);
-}
-
-.table-center-scenarios {
-  position: relative;
-  z-index: 1;
-  width: min(100%, 610px);
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 18px;
-}
-
-.table-center-scenarios span {
+.theme-switcher > summary > span:nth-child(2) {
   min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  padding: 6px 9px;
-  border: 1px solid rgba(193, 165, 105, .24);
-  border-radius: 999px;
-  background: rgba(4, 14, 10, .35);
-  color: #bdb6a3;
-  font-size: clamp(7px, .55vw, 10px);
-  text-overflow: ellipsis;
+}
+
+.theme-switcher > summary small,
+.theme-popover > small {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.theme-switcher > summary strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text);
+  font-size: 10px;
+  line-height: 1.1;
   white-space: nowrap;
 }
 
-.table-center-scenarios i {
-  width: 5px;
-  height: 5px;
+.theme-swatch {
+  width: 22px;
+  height: 22px;
   flex: none;
+  border: 1px solid rgba(255, 255, 255, .28);
   border-radius: 50%;
-  background: #c9ad69;
-  box-shadow: 0 0 8px rgba(201, 173, 105, .45);
+  box-shadow:
+    inset 0 0 0 4px rgba(4, 10, 14, .5),
+    0 0 12px rgba(0, 0, 0, .22);
 }
 
-.view-dossier .player-card {
-  --seat-scale: .64;
+.swatch-command {
+  background: linear-gradient(135deg, #63d5ff 0 50%, #172c3d 50%);
+}
+
+.swatch-ember {
+  background: linear-gradient(135deg, #f1a552 0 50%, #35170f 50%);
+}
+
+.swatch-biosphere {
+  background: linear-gradient(135deg, #8fd58a 0 50%, #132c24 50%);
+}
+
+.theme-popover {
   position: absolute;
-  top: var(--orbit-top);
-  left: var(--orbit-left);
-  z-index: 5;
-  width: var(--circle-card-width);
-  min-height: calc(var(--dossier-min-height) * var(--dossier-scale));
-  border: 1px solid rgba(193, 165, 105, .52);
-  border-radius: calc(7px * var(--dossier-scale));
-  background:
-    linear-gradient(135deg, rgba(38, 42, 35, .99), rgba(19, 25, 21, .99));
-  color: var(--dossier-table-ink);
-  box-shadow:
-    0 18px 34px rgba(0, 0, 0, .34),
-    0 0 0 1px rgba(238, 220, 177, .04),
-    inset 0 0 0 1px rgba(238, 220, 177, .025);
-  opacity: .86;
-  transform: translate(-50%, -50%) scale(var(--seat-scale));
-  transform-origin: center;
-  transition:
-    transform .28s cubic-bezier(.2, .8, .2, 1),
-    opacity .2s ease,
-    border-color .2s ease,
-    box-shadow .25s ease;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 330;
+  width: 248px;
+  padding: 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 10px;
+  background: #101e2b;
+  box-shadow: 0 24px 62px rgba(0, 0, 0, .62);
 }
 
-.view-dossier .player-card.current {
-  --seat-scale: .72;
-  border-color: rgba(118, 198, 155, .82);
-  background:
-    linear-gradient(135deg, rgba(35, 58, 44, .99), rgba(16, 32, 25, .99));
-  box-shadow:
-    0 20px 44px rgba(0, 0, 0, .4),
-    0 0 0 2px rgba(118, 198, 155, .18);
-  opacity: 1;
+.theme-popover > small {
+  margin: 2px 4px 9px;
 }
 
-.view-dossier .player-card:hover,
-.view-dossier .player-card:focus,
-.view-dossier .player-card:focus-within {
-  --seat-scale: 1.04;
-  z-index: 120;
-  border-color: rgba(226, 202, 139, .88);
-  box-shadow:
-    0 34px 74px rgba(0, 0, 0, .62),
-    0 0 0 2px rgba(226, 202, 139, .18),
-    inset 0 0 0 1px rgba(255, 243, 208, .04);
-  opacity: 1;
-  outline: none;
-  transform: translate(-50%, -50%) scale(var(--seat-scale));
-}
-
-.view-dossier .player-card:focus-visible {
-  outline: 3px solid #f0d790;
-  outline-offset: 5px;
-}
-
-.view-dossier .player-card::before {
-  right: 14%;
-  left: 14%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(214, 185, 116, .82), transparent);
-}
-
-.view-dossier .player-card.current::before {
-  background: linear-gradient(90deg, transparent, var(--dossier-table-green), transparent);
-}
-
-.view-dossier .player-topline {
-  border-bottom-color: rgba(193, 165, 105, .2);
-}
-
-.view-dossier .avatar.small {
-  border-color: rgba(193, 165, 105, .52);
-  border-radius: 3px;
-  background:
-    linear-gradient(145deg, rgba(193, 165, 105, .18), rgba(193, 165, 105, .045));
-  color: #e6cf98;
-  box-shadow: inset 0 0 0 1px rgba(255, 241, 203, .035);
-}
-
-.view-dossier .player-topline strong {
-  color: #f2ead7;
-  font-family: var(--font-oswald), sans-serif;
-  font-weight: 500;
-  letter-spacing: .025em;
-}
-
-.view-dossier .player-topline small {
-  color: #aaa38e;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-}
-
-.view-dossier .player-profile-list {
-  border-color: rgba(193, 165, 105, .24);
-  border-radius: calc(4px * var(--dossier-scale));
-  background:
-    linear-gradient(90deg, rgba(233, 220, 185, .025), transparent),
-    rgba(6, 13, 10, .44);
-}
-
-.view-dossier .player-profile-list .profile-row,
-.view-dossier .player-profile-list .profile-row:nth-child(even) {
-  border-bottom-color: rgba(193, 165, 105, .14);
+.theme-popover button {
+  width: 100%;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
   background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
 }
 
-.view-dossier .player-profile-list .profile-row:nth-child(even) {
-  background: rgba(232, 219, 184, .018);
+.theme-popover button:hover,
+.theme-popover button.active {
+  border-color: rgba(99, 213, 255, .34);
+  background: rgba(99, 213, 255, .09);
 }
 
-.view-dossier .player-profile-list .profile-row > .profile-label {
-  color: #aba38d;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-weight: 700;
-  letter-spacing: .07em;
+.theme-popover button > span:nth-child(2) {
+  min-width: 0;
 }
 
-.view-dossier .profile-icon {
-  color: #bda362;
-  filter: none;
+.theme-popover button strong {
+  display: block;
+  font-size: 11px;
 }
 
-.view-dossier .profile-row.hidden .profile-icon,
-.view-dossier .profile-row.hidden > .profile-label {
-  color: #686d62;
+.theme-popover button small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: 9px;
 }
 
-.view-dossier .profile-row.known .profile-value > b {
-  color: #eee7d5;
-  font-family: var(--font-manrope), sans-serif;
-  font-weight: 680;
+.theme-popover button b {
+  color: var(--color-action);
+  font-size: 13px;
 }
 
-.view-dossier .profile-row.public {
+html[data-theme="ember"] {
+  --color-bg: #100a08;
+  --color-surface-1: #1c100c;
+  --color-surface-2: #2a1710;
+  --color-surface-3: #3a2117;
+  --color-action: #f1a552;
+  --color-action-hover: #ffc170;
+  --color-on-action: #251205;
+  --color-text: #fff4e7;
+  --color-text-secondary: #dfc8b4;
+  --color-text-muted: #b79a84;
+  --color-border: rgba(239, 173, 108, .28);
+  --color-border-strong: rgba(239, 173, 108, .48);
+  --ink: var(--color-text);
+  --muted: var(--color-text-secondary);
+  --dim: var(--color-text-muted);
+  --line: var(--color-border);
+  --line-strong: var(--color-border-strong);
+  --olive: var(--color-action);
+  --olive-bright: var(--color-action-hover);
+}
+
+html[data-theme="biosphere"] {
+  --color-bg: #07100d;
+  --color-surface-1: #0d1d17;
+  --color-surface-2: #142b22;
+  --color-surface-3: #1d3a2f;
+  --color-action: #8fd58a;
+  --color-action-hover: #b2edae;
+  --color-on-action: #092014;
+  --color-text: #eef8ef;
+  --color-text-secondary: #c5d9ca;
+  --color-text-muted: #93ad9a;
+  --color-border: rgba(143, 213, 138, .26);
+  --color-border-strong: rgba(143, 213, 138, .46);
+  --ink: var(--color-text);
+  --muted: var(--color-text-secondary);
+  --dim: var(--color-text-muted);
+  --line: var(--color-border);
+  --line-strong: var(--color-border-strong);
+  --olive: var(--color-action);
+  --olive-bright: var(--color-action-hover);
+}
+
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .landing-shell,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .lobby-shell,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell {
   background:
-    linear-gradient(90deg, rgba(118, 198, 155, .14), rgba(118, 198, 155, .02) 68%);
-  box-shadow: inset 3px 0 rgba(118, 198, 155, .72);
+    radial-gradient(circle at 52% 14%, color-mix(in srgb, var(--color-action) 13%, transparent), transparent 34%),
+    linear-gradient(color-mix(in srgb, var(--color-bg) 86%, transparent), color-mix(in srgb, var(--color-bg) 97%, transparent)),
+    image-set(
+      url("/bunker-command.avif") type("image/avif"),
+      url("/bunker-command.webp") type("image/webp")
+    ) center / cover scroll;
 }
 
-.view-dossier .profile-row.public > .profile-label,
-.view-dossier .profile-row.public .profile-value > b {
-  color: #a9dfbd;
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-header {
+  border-bottom-color: color-mix(in srgb, var(--color-action) 28%, transparent);
+  background: color-mix(in srgb, var(--color-bg) 94%, #17212a 6%);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .28);
 }
 
-.view-dossier .player-profile-list button.term-help {
-  border-color: rgba(193, 165, 105, .24);
-  background: rgba(193, 165, 105, .05);
-  color: #d4b970;
-}
-
-.view-dossier .player-profile-list button.term-help:hover,
-.view-dossier .player-profile-list button.term-help:focus-visible {
-  border-color: rgba(226, 202, 139, .65);
-  background: rgba(193, 165, 105, .15);
-}
-
-.view-dossier .player-ability-card {
-  border-color: rgba(193, 165, 105, .35);
-  border-radius: 0 0 calc(4px * var(--dossier-scale)) calc(4px * var(--dossier-scale));
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .phase-bar {
+  border-bottom-color: color-mix(in srgb, var(--color-action) 32%, transparent);
   background:
-    linear-gradient(100deg, rgba(167, 126, 80, .16), rgba(193, 165, 105, .035));
-  box-shadow: inset 3px 0 rgba(193, 165, 105, .64);
+    linear-gradient(105deg, color-mix(in srgb, var(--color-surface-3) 84%, #101820), color-mix(in srgb, var(--color-surface-1) 94%, #080d12));
 }
 
-.view-dossier .player-ability-card.concealed {
-  border-color: rgba(126, 120, 99, .28);
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .phase-bar::before {
+  background: var(--color-action);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-action) 38%, transparent);
+}
+
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .entry-panel,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .crew-panel,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .protocol-panel {
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-1) 96%, transparent);
+}
+
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .invite-card,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .round-control-dock {
+  border-color: color-mix(in srgb, var(--color-action) 46%, transparent);
   background:
-    repeating-linear-gradient(135deg, rgba(137, 128, 104, .03) 0 8px, rgba(137, 128, 104, .075) 8px 9px),
-    rgba(7, 13, 10, .42);
-  box-shadow: inset 3px 0 rgba(126, 120, 99, .46);
+    linear-gradient(110deg, color-mix(in srgb, var(--color-surface-3) 82%, transparent), color-mix(in srgb, var(--color-surface-1) 97%, transparent));
 }
 
-.view-dossier .player-ability-summary .profile-label,
-.view-dossier .player-ability-card.concealed .profile-label {
-  color: #cbb781;
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .scenario-card {
+  border-color: color-mix(in srgb, var(--color-action) 28%, transparent);
+  background-color: var(--color-surface-1);
 }
 
-.view-dossier .player-ability-summary > em {
-  border-color: rgba(193, 165, 105, .42);
-  border-radius: 3px;
-  background: rgba(193, 165, 105, .09);
-  color: #dcc88f;
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .scenario-card::before {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 98%, transparent), color-mix(in srgb, var(--color-bg) 84%, transparent) 64%, color-mix(in srgb, var(--color-bg) 58%, transparent)),
+    linear-gradient(0deg, color-mix(in srgb, var(--color-bg) 94%, transparent), transparent 75%);
 }
 
-.view-dossier .turn-badge {
-  border-radius: 0 5px 0 3px;
-  background: var(--dossier-table-green);
-  color: #0b2016;
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell .player-card {
+  border-color: var(--color-border);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--color-surface-3) 92%, #26313a), color-mix(in srgb, var(--color-surface-1) 96%, #081018));
 }
 
-.view-dossier .vote-button {
-  border-color: var(--dossier-table-red);
-  border-radius: 4px;
-  background: var(--dossier-table-red);
-  color: #260b0b;
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell .player-card::before {
+  background: linear-gradient(90deg, transparent, var(--color-action), transparent);
 }
 
-.view-dossier .excluded-stamp {
-  border-color: rgba(216, 111, 111, .72);
-  color: #e29595;
-  font-family: var(--font-oswald), sans-serif;
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell .player-profile-list {
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-bg) 58%, transparent);
 }
 
-.view-dossier.phase-voting .player-card,
-.view-dossier.phase-runoff .player-card {
-  border-color: rgba(216, 111, 111, .46);
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell .avatar.small,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .brand-mark {
+  border-color: color-mix(in srgb, var(--color-action) 50%, transparent);
+  background: color-mix(in srgb, var(--color-action) 12%, transparent);
+  color: var(--color-action-hover);
 }
 
-.view-dossier.phase-voting .dossier-table-center,
-.view-dossier.phase-runoff .dossier-table-center {
-  box-shadow:
-    0 28px 60px rgba(0, 0, 0, .5),
-    0 0 0 2px rgba(216, 111, 111, .72),
-    0 0 0 7px #171914,
-    inset 0 0 60px rgba(0, 0, 0, .48);
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell .profile-icon,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .scenario-strip-heading small,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .table-heading small,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .room-pill strong {
+  color: var(--color-action-hover);
 }
 
-@media (max-width: 1180px) {
-  .view-dossier .player-grid {
-    min-height: 640px;
-    display: flex;
-    align-items: flex-start;
-    gap: 18px;
-    overflow-x: auto;
-    padding: 190px 6vw 34px;
-    scroll-padding-inline: 6vw;
-    scroll-snap-type: x mandatory;
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .primary-button,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .save-rules-button,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .pass-turn-button,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .host-phase-button.primary {
+  border-color: var(--color-action);
+  background: var(--color-action);
+  color: var(--color-on-action);
+  box-shadow: 0 9px 26px color-mix(in srgb, var(--color-action) 19%, transparent);
+}
+
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .theme-switcher > summary {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-1);
+}
+
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .theme-popover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-1);
+}
+
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .theme-popover button:hover,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .theme-popover button.active {
+  border-color: color-mix(in srgb, var(--color-action) 40%, transparent);
+  background: color-mix(in srgb, var(--color-action) 10%, transparent);
+}
+
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell.phase-voting .phase-bar,
+:is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell.phase-runoff .phase-bar {
+  border-color: rgba(255, 124, 138, .48);
+  background: linear-gradient(100deg, rgba(78, 28, 46, .98), rgba(30, 20, 37, .97));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell .player-card:hover,
+  :is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell .player-card:focus-within {
+    border-color: color-mix(in srgb, var(--color-action) 72%, white);
+    box-shadow:
+      0 calc(28px * var(--dossier-scale)) calc(68px * var(--dossier-scale)) rgba(0, 0, 0, .55),
+      0 0 0 2px color-mix(in srgb, var(--color-action) 15%, transparent);
   }
 
-  .view-dossier .dossier-table-center {
-    top: 78px;
-    width: min(86%, 760px);
-    min-height: 126px;
-    padding: 18px 8%;
-    border-width: 6px;
-    border-radius: 999px;
-    transform: translateX(-50%);
-  }
-
-  .view-dossier .table-center-seal {
-    position: absolute;
-    left: 7%;
-    width: 46px;
-    margin: 0;
-  }
-
-  .view-dossier .dossier-table-center > strong {
-    font-size: 25px;
-  }
-
-  .view-dossier .dossier-table-center > p {
-    margin-top: 5px;
-  }
-
-  .view-dossier .table-center-scenarios {
-    display: none;
-  }
-
-  .view-dossier .player-card,
-  .view-dossier .player-card.current {
-    --seat-scale: 1;
-    position: relative;
-    top: auto;
-    left: auto;
-    width: min(82vw, 360px);
-    min-width: min(82vw, 360px);
-    min-height: 150px;
-    max-height: 150px;
-    flex: 0 0 min(82vw, 360px);
-    overflow: hidden;
-    opacity: .82;
-    scroll-snap-align: center;
-    transform: none;
-    transition:
-      max-height .3s ease,
-      opacity .2s ease,
-      border-color .2s ease,
-      box-shadow .25s ease;
-  }
-
-  .view-dossier .player-card:hover,
-  .view-dossier .player-card:focus,
-  .view-dossier .player-card:focus-within {
-    z-index: 20;
-    min-height: calc(var(--dossier-min-height) * var(--dossier-scale));
-    max-height: 1000px;
-    opacity: 1;
-    transform: none;
+  :is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell.phase-voting .player-card:hover,
+  :is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell.phase-voting .player-card:focus-within,
+  :is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell.phase-runoff .player-card:hover,
+  :is(html[data-theme="ember"], html[data-theme="biosphere"]) .game-shell.phase-runoff .player-card:focus-within {
+    border-color: rgba(255, 124, 138, .72);
+    box-shadow:
+      0 calc(24px * var(--dossier-scale)) calc(56px * var(--dossier-scale)) rgba(0, 0, 0, .52),
+      0 0 0 2px rgba(255, 124, 138, .14);
   }
 }
 
 @media (max-width: 760px) {
-  .view-dossier .phase-bar {
-    min-height: 0;
+  .landing-header-tools,
+  .header-actions {
+    gap: 8px;
   }
 
-  .view-dossier .phase-bar h1 {
-    font-size: 28px;
-  }
-
-  .view-dossier .scenario-strip-heading {
-    align-items: center;
-  }
-
-  .view-dossier .scenario-stack {
-    grid-template-columns: repeat(3, minmax(150px, 1fr));
-    overflow-x: auto;
-    padding-bottom: 6px;
-  }
-
-  .view-dossier .table-heading {
-    display: grid;
-    gap: 10px;
-  }
-
-  .view-dossier .table-heading-tools {
-    width: 100%;
-    flex-flow: row wrap;
-    justify-content: flex-start;
-  }
-
-  .view-dossier .view-mode-control {
-    width: 100%;
-    overflow-x: auto;
-  }
-
-  .view-dossier .view-mode-control button {
-    flex: 1 0 auto;
+  .theme-switcher > summary {
+    min-width: 44px;
+    min-height: 44px;
     justify-content: center;
+    padding: 7px;
   }
 
-  .view-dossier .player-grid {
-    min-height: 600px;
-    padding-top: 170px;
+  .theme-switcher > summary > span:nth-child(2) {
+    display: none;
   }
 
-  .view-dossier .dossier-table-center {
-    top: 64px;
-    min-height: 112px;
-    padding-inline: 20%;
+  .theme-popover {
+    position: fixed;
+    top: 76px;
+    right: 12px;
+    left: 12px;
+    width: auto;
   }
 
-  .view-dossier .table-center-seal {
-    left: 5%;
-    width: 40px;
-  }
-
-  .view-dossier .dossier-table-center > small {
-    font-size: 7px;
-  }
-
-  .view-dossier .dossier-table-center > strong {
-    font-size: 20px;
+  .game-meta .theme-switcher {
+    order: 3;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .view-dossier .player-card {
+  .game-shell .player-card {
     transition: none;
   }
 }
