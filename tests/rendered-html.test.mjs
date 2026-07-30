@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -73,6 +73,10 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(client, /Усі фази без таймерів/);
   assert.match(client, /Передати хід/);
   assert.match(client, /Активувати картку/);
+  assert.match(client, /abilityKnown \? "known" : "concealed"/);
+  assert.doesNotMatch(client, /player-ability-card \$\{abilityKnown \? "known" : "hidden"\}/);
+  assert.match(client, /Authorization: `Bearer \$\{current\.token\}`/);
+  assert.match(client, /"X-Player-Id": current\.playerId/);
   assert.match(client, /Обговорення без голосування/);
   assert.match(client, /Перейти до другого раунду/);
   assert.doesNotMatch(client, /lockedProfession/);
@@ -123,8 +127,35 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(css, /button\.term-help[\s\S]*grid-template-columns: 1fr/);
   assert.match(css, /\.term-tooltip \{[\s\S]*left: -12px;[\s\S]*right: auto/);
   assert.match(css, /\.player-vote-tally/);
+  assert.match(css, /\.player-ability-card\.concealed/);
+  assert.doesNotMatch(css, /\.player-ability-card\.hidden/);
+  assert.match(api, /function claimActiveAbility/);
+  assert.match(api, /WHERE id = \? AND revealed_json = \?/);
+  assert.match(api, /request\.headers\.get\("Authorization"\)/);
+  assert.match(api, /room\.status === "finished"[\s\S]*allCards\.filter\(\(card\) => card\.category !== "special"\)/);
+  assert.match(api, /ability: abilityUsed \? allCards\.find/);
   assert.match(startFile, /npm run dev -- --port 3000/);
   assert.match(stopFile, /kill "\$SERVER_PID"/);
   assert.notEqual(startStats.mode & 0o100, 0);
   assert.notEqual(stopStats.mode & 0o100, 0);
+});
+
+test("does not ship private card values in browser code", async () => {
+  const assetsDirectory = new URL("../dist/client/assets/", import.meta.url);
+  const assetNames = await readdir(assetsDirectory);
+  const javascript = (
+    await Promise.all(
+      assetNames
+        .filter((name) => name.endsWith(".js"))
+        .map((name) => readFile(new URL(name, assetsDirectory), "utf8")),
+    )
+  ).join("\n");
+
+  for (const privateValue of [
+    "Імунітет громади",
+    "Інженер систем вентиляції",
+    "Каскад сонячних спалахів",
+  ]) {
+    assert.doesNotMatch(javascript, new RegExp(privateValue));
+  }
 });

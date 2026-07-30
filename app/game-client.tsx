@@ -765,7 +765,7 @@ function PlayerAbilityCard({
     (!votingAbility || ["voting", "runoff"].includes(state.room.phase));
   const activeTargets = state.players.filter((player) => player.active && !player.isYou);
   return (
-    <section className={`player-ability-card ${abilityKnown ? "known" : "hidden"} ${abilityUsed ? "used" : ""}`}>
+    <section className={`player-ability-card ${abilityKnown ? "known" : "concealed"} ${abilityUsed ? "used" : ""}`}>
       <div className="player-ability-summary">
         <span className="profile-label"><span className="ability-glyph" aria-hidden="true">✦</span>Активна карта</span>
         {abilityKnown && ability?.note
@@ -1080,8 +1080,14 @@ export default function GameClient() {
 
   const loadState = useCallback(async (current: Session, quiet = false) => {
     try {
-      const query = new URLSearchParams(current);
-      const response = await fetch(`/api/game?${query}`, { cache: "no-store" });
+      const query = new URLSearchParams({ code: current.code });
+      const response = await fetch(`/api/game?${query}`, {
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${current.token}`,
+          "X-Player-Id": current.playerId,
+        },
+      });
       const data = await response.json() as { state?: GameState; error?: string };
       if (!response.ok) throw new Error(data.error || "Не вдалося оновити стан.");
       if (data.state) {

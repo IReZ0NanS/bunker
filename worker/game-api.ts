@@ -322,12 +322,21 @@ function phaseFlag(kind: "immune" | "double-vote", room: RoomRow) {
   return `@${kind}:${room.round}:${room.phase}`;
 }
 
-async function addPlayerFlags(db: D1Database, player: PlayerRow, ...flags: string[]) {
+async function claimActiveAbility(db: D1Database, player: PlayerRow, ...extraFlags: string[]) {
   const stored = storedPlayerState(player);
-  for (const flag of flags) {
-    if (!stored.includes(flag)) stored.push(flag);
+  if (stored.includes("@ability-used")) return false;
+  const next = [...stored, "@ability-used"];
+  for (const flag of extraFlags) {
+    if (!next.includes(flag)) next.push(flag);
   }
-  await db.prepare("UPDATE players SET revealed_json = ? WHERE id = ?").bind(JSON.stringify(stored), player.id).run();
+  const nextJson = JSON.stringify(next);
+  const result = await db
+    .prepare("UPDATE players SET revealed_json = ? WHERE id = ? AND revealed_json = ?")
+    .bind(nextJson, player.id, player.revealed_json)
+    .run();
+  if (!result.meta.changes) return false;
+  player.revealed_json = nextJson;
+  return true;
 }
 
 function activeCard(player: PlayerRow) {
@@ -635,7 +644,9 @@ async function publicState(db: D1Database, room: RoomRow, viewer: PlayerRow) {
         isBot: isBot(player),
         isYou: player.id === viewer.id,
         revealed: allCards.filter((card) => revealed.includes(card.category)),
-        character: room.status === "finished" ? allCards : undefined,
+        character: room.status === "finished"
+          ? allCards.filter((card) => card.category !== "special")
+          : undefined,
         ability: abilityUsed ? allCards.find((card) => card.category === "special") : undefined,
         abilityUsed,
         hasVoted: player.vote_round === room.round && player.vote_phase === room.phase,
@@ -742,6 +753,9 @@ async function applyActiveAbility(
   if (ability === "reroll_self") {
     const index = playerCards.findIndex((item) => item.category === category);
     if (index < 0) return json({ error: "Характеристику не знайдено." }, 404);
+    if (!(await claimActiveAbility(db, player))) {
+      return json({ error: "Цю активну картку вже використано." }, 409);
+    }
     playerCards[index] = makeCard(category, playerCards[index]!.value);
     await db.prepare("UPDATE players SET character_json = ? WHERE id = ?").bind(JSON.stringify(playerCards), player.id).run();
     logText = `${player.name} оновлює власну характеристику «${playerCards[index]!.label}».`;
@@ -751,6 +765,9 @@ async function applyActiveAbility(
     const ownIndex = playerCards.findIndex((item) => item.category === category);
     const targetIndex = targetCards.findIndex((item) => item.category === category);
     if (ownIndex < 0 || targetIndex < 0) return json({ error: "Характеристику не знайдено." }, 404);
+    if (!(await claimActiveAbility(db, player))) {
+      return json({ error: "Цю активну картку вже використано." }, 409);
+    }
     const ownCard = playerCards[ownIndex]!;
     playerCards[ownIndex] = { ...targetCards[targetIndex]!, category, label: ownCard.label };
     targetCards[targetIndex] = { ...ownCard, category, label: targetCards[targetIndex]!.label };
@@ -763,13 +780,18 @@ async function applyActiveAbility(
     if (!["voting", "runoff"].includes(room.phase)) {
       return json({ error: "Імунітет активується лише під час голосування." }, 409);
     }
-    await addPlayerFlags(db, player, "@ability-used", phaseFlag("immune", room));
+    if (!(await claimActiveAbility(db, player, phaseFlag("immune", room)))) {
+      return json({ error: "Цю активну картку вже використано." }, 409);
+    }
     await appendLog(db, room, { kind: "ability", text: `${player.name} активує імунітет: один голос не буде враховано.` });
     return null;
   } else if (ability === "expose") {
     if (!target) return json({ error: "Оберіть іншого активного гравця." }, 400);
     if (revealedCategories(target).includes(category)) {
       return json({ error: "Ця характеристика гравця вже відкрита." }, 409);
+    }
+    if (!(await claimActiveAbility(db, player))) {
+      return json({ error: "Цю активну картку вже використано." }, 409);
     }
     const stored = storedPlayerState(target);
     stored.push(category);
@@ -781,6 +803,9 @@ async function applyActiveAbility(
     const targetCards = parse<CharacterCard[]>(target.character_json, []);
     const index = targetCards.findIndex((item) => item.category === category);
     if (index < 0) return json({ error: "Характеристику не знайдено." }, 404);
+    if (!(await claimActiveAbility(db, player))) {
+      return json({ error: "Цю активну картку вже використано." }, 409);
+    }
     const previous = targetCards[index]!;
     targetCards[index] = makeCard(category, previous.value);
     await db.prepare("UPDATE players SET character_json = ? WHERE id = ?").bind(JSON.stringify(targetCards), target.id).run();
@@ -789,12 +814,13 @@ async function applyActiveAbility(
     if (!["voting", "runoff"].includes(room.phase)) {
       return json({ error: "Подвійний голос активується лише під час голосування." }, 409);
     }
-    await addPlayerFlags(db, player, "@ability-used", phaseFlag("double-vote", room));
+    if (!(await claimActiveAbility(db, player, phaseFlag("double-vote", room)))) {
+      return json({ error: "Цю активну картку вже використано." }, 409);
+    }
     await appendLog(db, room, { kind: "ability", text: `${player.name} активує подвійний голос.` });
     return null;
   }
 
-  await addPlayerFlags(db, player, "@ability-used");
   await appendLog(db, room, { kind: "ability", text: logText });
   return null;
 }
@@ -936,8 +962,11 @@ export async function handleGameApi(request: Request, env: Env) {
     if (request.method === "GET") {
       const url = new URL(request.url);
       const code = (url.searchParams.get("code") ?? "").toUpperCase();
-      const playerId = url.searchParams.get("playerId") ?? "";
-      const token = url.searchParams.get("token") ?? "";
+      const playerId = request.headers.get("X-Player-Id") ?? url.searchParams.get("playerId") ?? "";
+      const authorization = request.headers.get("Authorization") ?? "";
+      const token = authorization.startsWith("Bearer ")
+        ? authorization.slice("Bearer ".length)
+        : url.searchParams.get("token") ?? "";
       const room = await advanceGame(env.DB, code);
       if (!room) return json({ error: "Кімнату не знайдено." }, 404);
       const player = await authenticatedPlayer(env.DB, code, playerId, token);

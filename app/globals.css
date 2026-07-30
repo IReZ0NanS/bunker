@@ -2500,7 +2500,7 @@ input::placeholder {
 .player-ability-summary .profile-value > b {
   color: #e7ddff;
 }
-.player-ability-card.hidden .profile-value > b {
+.player-ability-card.concealed .profile-value > b {
   color: #718398;
   font-size: 17px;
 }
@@ -2522,11 +2522,11 @@ input::placeholder {
   background: rgba(112,229,173,.08);
   color: #9fecc5;
 }
-.player-ability-card.hidden {
+.player-ability-card.concealed {
   background: rgba(95,113,133,.04);
   border-color: rgba(145,163,183,.14);
 }
-.player-ability-card.hidden .ability-glyph {
+.player-ability-card.concealed .ability-glyph {
   color: #63758a !important;
   filter: none;
 }
@@ -2893,7 +2893,7 @@ input::placeholder {
   font-size: calc(var(--type-card-value) * var(--dossier-scale));
 }
 .game-shell .profile-row.hidden .profile-value > b,
-.game-shell .player-ability-card.hidden .profile-value > b {
+.game-shell .player-ability-card.concealed .profile-value > b {
   font-size: calc(17px * var(--dossier-scale));
 }
 .game-shell .player-profile-list button.term-help,
