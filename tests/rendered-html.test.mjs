@@ -129,6 +129,10 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(css, /\.player-vote-tally/);
   assert.match(css, /\.player-ability-card\.concealed/);
   assert.doesNotMatch(css, /\.player-ability-card\.hidden/);
+  assert.match(css, /Visual preset A: refined command-center surfaces/);
+  assert.match(css, /button\.term-help,[\s\S]*width: calc\(28px \* var\(--dossier-scale\)\)/);
+  assert.match(css, /@media \(prefers-contrast: more\)/);
+  assert.match(css, /@media \(prefers-reduced-transparency: reduce\)/);
   assert.match(api, /function claimActiveAbility/);
   assert.match(api, /WHERE id = \? AND revealed_json = \?/);
   assert.match(api, /request\.headers\.get\("Authorization"\)/);

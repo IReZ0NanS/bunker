@@ -3054,3 +3054,683 @@ input::placeholder {
     margin-bottom: calc(5px * var(--dossier-scale));
   }
 }
+
+/* Visual preset A: refined command-center surfaces without changing game layout. */
+:root {
+  --type-micro: 11px;
+  --type-label: 11px;
+  --type-control: 13px;
+  --type-body-small: 13px;
+  --type-body: 15px;
+  --type-card-value: 13px;
+  --color-text-secondary: #c8d3df;
+  --color-text-muted: #9eafc1;
+  --color-border: rgba(178, 204, 230, .28);
+  --color-border-strong: rgba(178, 204, 230, .48);
+}
+
+.game-shell {
+  --dossier-min-height: 410px;
+  --dossier-row-height: 35px;
+  --dossier-ability-height: 42px;
+  --dossier-help-width: 30px;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(73, 139, 174, .09), transparent 32%),
+    linear-gradient(rgba(5, 11, 18, .8), rgba(5, 11, 18, .96)),
+    image-set(
+      url("/bunker-command.avif") type("image/avif"),
+      url("/bunker-command.webp") type("image/webp")
+    ) center / cover fixed;
+}
+
+.game-header {
+  border-bottom-color: rgba(153, 205, 230, .2);
+  background: rgba(6, 14, 22, .94);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .24);
+  backdrop-filter: blur(16px);
+}
+
+.game-header .brand-mark {
+  border-color: rgba(99, 213, 255, .4);
+  background: rgba(99, 213, 255, .04);
+  box-shadow: inset 0 0 18px rgba(99, 213, 255, .06);
+}
+
+.room-pill strong {
+  color: #bcefff;
+  text-shadow: 0 0 18px rgba(99, 213, 255, .28);
+}
+
+.phase-bar {
+  isolation: isolate;
+  position: relative;
+  overflow: hidden;
+  border-bottom-color: rgba(153, 205, 230, .24);
+  background:
+    linear-gradient(100deg, rgba(18, 41, 60, .98), rgba(9, 22, 34, .97));
+  box-shadow: inset 0 -1px rgba(255, 255, 255, .025);
+}
+
+.phase-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(99, 213, 255, .045) 1px, transparent 1px),
+    linear-gradient(rgba(99, 213, 255, .035) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, .75), transparent 70%);
+  pointer-events: none;
+}
+
+.phase-bar h1 {
+  color: #fff;
+  letter-spacing: .01em;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, .42);
+}
+
+.phase-bar p {
+  max-width: 760px;
+  color: #c4d0dc;
+  font-size: var(--type-body-small);
+  line-height: 1.5;
+}
+
+.phase-voting .phase-bar,
+.phase-runoff .phase-bar {
+  background: linear-gradient(100deg, rgba(78, 28, 46, .98), rgba(30, 20, 37, .97));
+}
+
+.phase-discussion .phase-bar {
+  background: linear-gradient(100deg, rgba(28, 51, 79, .98), rgba(14, 28, 47, .97));
+}
+
+.scenario-strip-heading {
+  min-height: 28px;
+  align-items: center;
+}
+
+.scenario-strip-heading small,
+.table-heading small {
+  color: #a9dff2;
+  font-weight: 800;
+}
+
+.scenario-strip-heading strong {
+  color: #a7b7c8;
+  font-size: var(--type-body-small);
+}
+
+.scenario-card {
+  border-color: rgba(171, 205, 232, .28);
+  background-color: #0d1c29;
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, .25),
+    inset 0 1px rgba(255, 255, 255, .035);
+}
+
+.scenario-card::before {
+  background:
+    linear-gradient(90deg, rgba(6, 15, 24, .98) 0%, rgba(7, 17, 27, .89) 62%, rgba(7, 17, 27, .62) 100%),
+    linear-gradient(0deg, rgba(5, 14, 22, .96), transparent 72%);
+}
+
+.scenario-card .scenario-body small {
+  color: #b1c1d1;
+}
+
+.scenario-card .scenario-body h3 {
+  color: #fff;
+  line-height: 1.15;
+  text-shadow: 0 3px 22px #000;
+}
+
+.scenario-card .scenario-body p,
+.scenario-card .scenario-body li {
+  color: #d8e1ea;
+}
+
+.round-control-dock {
+  border-color: rgba(99, 213, 255, .48);
+  background:
+    linear-gradient(110deg, rgba(17, 35, 51, .98), rgba(10, 24, 37, .98));
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, .32),
+    inset 0 1px rgba(255, 255, 255, .04);
+}
+
+.round-control-status strong {
+  color: #fff;
+  font-size: 15px;
+}
+
+.round-control-status small {
+  color: #aebdcb;
+  font-size: 10px;
+}
+
+.table-heading {
+  border-bottom: 1px solid rgba(178, 204, 230, .14);
+  padding-bottom: 14px;
+}
+
+.table-heading strong {
+  color: #fff;
+  font-size: 18px;
+}
+
+.table-heading-tools > em {
+  color: #bceeff;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.table-heading.voting-heading {
+  border-color: rgba(255, 124, 138, .5);
+  background:
+    linear-gradient(110deg, rgba(255, 124, 138, .13), rgba(255, 124, 138, .06));
+  box-shadow: inset 4px 0 var(--color-danger);
+}
+
+.game-shell .player-grid {
+  gap: calc(16px * var(--dossier-scale));
+}
+
+.game-shell .player-card {
+  isolation: isolate;
+  border-color: rgba(178, 204, 230, .3);
+  border-radius: calc(14px * var(--dossier-scale));
+  background:
+    linear-gradient(145deg, rgba(27, 47, 64, .99), rgba(12, 26, 39, .99));
+  box-shadow:
+    0 calc(16px * var(--dossier-scale)) calc(42px * var(--dossier-scale)) rgba(0, 0, 0, .24),
+    inset 0 1px rgba(255, 255, 255, .035);
+  transition:
+    border-color .2s ease,
+    box-shadow .2s ease,
+    transform .2s ease,
+    opacity .2s ease;
+}
+
+.game-shell .player-card::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: calc(18px * var(--dossier-scale));
+  left: calc(18px * var(--dossier-scale));
+  z-index: 2;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, transparent, rgba(99, 213, 255, .7), transparent);
+  opacity: .48;
+  pointer-events: none;
+}
+
+.game-shell .player-card.current {
+  border-color: rgba(112, 229, 173, .82);
+  background:
+    linear-gradient(145deg, rgba(28, 58, 67, .99), rgba(12, 31, 42, .99));
+  box-shadow:
+    0 0 0 1px rgba(112, 229, 173, .18),
+    0 20px 48px rgba(15, 76, 65, .2);
+}
+
+.game-shell .player-card.current::before {
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--color-success), transparent);
+  opacity: 1;
+}
+
+.game-shell .player-card.selected::before {
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--color-danger), transparent);
+  opacity: 1;
+}
+
+.game-shell .player-card.excluded::before {
+  background: linear-gradient(90deg, transparent, #718092, transparent);
+  opacity: .3;
+}
+
+.game-shell .player-topline {
+  padding-bottom: calc(10px * var(--dossier-scale));
+  border-bottom: 1px solid rgba(178, 204, 230, .12);
+}
+
+.game-shell .avatar.small {
+  border-color: rgba(99, 213, 255, .45);
+  background: linear-gradient(145deg, rgba(99, 213, 255, .16), rgba(99, 213, 255, .05));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .035);
+}
+
+.game-shell .bot-avatar {
+  border-color: rgba(255, 197, 107, .5);
+  background: linear-gradient(145deg, rgba(255, 197, 107, .16), rgba(255, 197, 107, .05));
+  color: #ffdb9f;
+}
+
+.game-shell .player-topline strong {
+  color: #fff;
+  font-weight: 720;
+  letter-spacing: -.01em;
+}
+
+.game-shell .player-topline small {
+  color: #aab9c8;
+  letter-spacing: .07em;
+}
+
+.game-shell .player-effects {
+  align-items: center;
+}
+
+.game-shell .player-effects span {
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: .045em;
+}
+
+.game-shell .player-profile-list {
+  border: 1px solid rgba(178, 204, 230, .16);
+  border-radius: calc(10px * var(--dossier-scale));
+  overflow: clip;
+  background: rgba(5, 14, 23, .3);
+}
+
+.game-shell .player-profile-list .profile-row {
+  border-bottom-color: rgba(178, 204, 230, .12);
+  background: rgba(255, 255, 255, .012);
+}
+
+.game-shell .player-profile-list .profile-row:nth-child(even) {
+  background-color: rgba(151, 191, 220, .022);
+}
+
+.game-shell .player-profile-list .profile-row:last-of-type {
+  border-bottom: 0;
+}
+
+.game-shell .player-profile-list .profile-row.hidden {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(112, 132, 153, .026) 0 7px,
+      rgba(112, 132, 153, .055) 7px 8px
+    );
+}
+
+.game-shell .player-profile-list .profile-row.public {
+  background:
+    linear-gradient(90deg, rgba(112, 229, 173, .12), rgba(112, 229, 173, .025) 62%);
+  box-shadow: inset 3px 0 rgba(112, 229, 173, .75);
+}
+
+.game-shell .player-profile-list .profile-row.can-reveal {
+  background:
+    linear-gradient(90deg, rgba(99, 213, 255, .11), rgba(99, 213, 255, .025) 72%);
+  box-shadow: inset 3px 0 rgba(99, 213, 255, .7);
+}
+
+.game-shell .player-profile-list .profile-row > .profile-label {
+  color: #a9b8c8;
+  font-weight: 760;
+  letter-spacing: .065em;
+}
+
+.game-shell .profile-row.hidden > .profile-label {
+  color: #8192a5;
+}
+
+.game-shell .profile-row.public > .profile-label {
+  color: #b9efd5;
+}
+
+.game-shell .profile-row.known .profile-value > b {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #f6f9fc;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.game-shell .profile-row.public .profile-value > b {
+  color: #b5f3d3;
+}
+
+.game-shell .profile-row.hidden .profile-value > b {
+  color: #7f91a4;
+  font-weight: 500;
+  letter-spacing: .14em;
+}
+
+.game-shell .player-profile-list button.term-help,
+.game-shell .player-profile-list .term-help-placeholder {
+  width: calc(28px * var(--dossier-scale));
+  height: calc(28px * var(--dossier-scale));
+}
+
+.game-shell .player-profile-list button.term-help {
+  border: 1px solid rgba(99, 213, 255, .18);
+  background: rgba(99, 213, 255, .045);
+}
+
+.game-shell .player-profile-list button.term-help:hover,
+.game-shell .player-profile-list button.term-help:focus-visible {
+  border-color: rgba(99, 213, 255, .5);
+  background: rgba(99, 213, 255, .14);
+}
+
+.game-shell .player-profile-list button.profile-reveal-button {
+  min-height: calc(34px * var(--dossier-scale));
+  border-color: rgba(99, 213, 255, .5);
+  background: rgba(99, 213, 255, .12);
+  color: #c3f1ff;
+  font-size: max(9px, calc(9px * var(--dossier-scale)));
+}
+
+.game-shell .player-profile-list button.profile-reveal-button:hover:not(:disabled) {
+  background: rgba(99, 213, 255, .22);
+  box-shadow: inset 3px 0 var(--color-action);
+}
+
+.game-shell .player-ability-card {
+  margin: -1px;
+  border: 1px solid rgba(192, 167, 255, .34);
+  border-radius: 0 0 calc(10px * var(--dossier-scale)) calc(10px * var(--dossier-scale));
+  overflow: hidden;
+  background:
+    linear-gradient(100deg, rgba(192, 167, 255, .15), rgba(99, 213, 255, .035));
+  box-shadow: inset 3px 0 rgba(192, 167, 255, .72);
+}
+
+.game-shell .player-ability-card.concealed {
+  border-color: rgba(137, 154, 176, .22);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(112, 132, 153, .035) 0 8px,
+      rgba(112, 132, 153, .075) 8px 9px
+    ),
+    rgba(5, 14, 23, .38);
+  box-shadow: inset 3px 0 rgba(112, 132, 153, .46);
+}
+
+.game-shell .player-ability-card.used {
+  border-color: rgba(112, 229, 173, .34);
+  background: linear-gradient(90deg, rgba(112, 229, 173, .1), rgba(112, 229, 173, .02));
+  box-shadow: inset 3px 0 rgba(112, 229, 173, .62);
+}
+
+.game-shell .player-ability-summary .profile-label {
+  color: #d3c4f6;
+  font-weight: 800;
+}
+
+.game-shell .player-ability-card.concealed .profile-label {
+  color: #8c9bae;
+}
+
+.game-shell .player-ability-summary > em {
+  border-color: rgba(192, 167, 255, .42);
+  background: rgba(192, 167, 255, .08);
+  color: #ddcffc;
+}
+
+.game-shell .player-ability-card.concealed .player-ability-summary > em {
+  border-color: rgba(137, 154, 176, .28);
+  background: rgba(137, 154, 176, .06);
+  color: #9aa9b9;
+}
+
+.game-shell .player-vote-tally {
+  border-color: rgba(255, 197, 107, .58);
+  background:
+    linear-gradient(100deg, rgba(255, 197, 107, .13), rgba(255, 197, 107, .045));
+  box-shadow: inset 3px 0 rgba(255, 197, 107, .7);
+}
+
+.game-shell .vote-button,
+.game-shell .player-profile-list .player-ability-controls .ability-button,
+.round-control-dock .pass-turn-button,
+.round-control-dock .host-phase-button {
+  min-height: 44px;
+  border-radius: 8px;
+  letter-spacing: .025em;
+}
+
+.game-shell .vote-button {
+  height: calc(48px * var(--dossier-scale));
+  font-size: max(11px, calc(12px * var(--dossier-scale)));
+}
+
+.game-shell .turn-badge {
+  border-radius: 0 calc(13px * var(--dossier-scale)) 0 calc(9px * var(--dossier-scale));
+  box-shadow: 0 8px 22px rgba(39, 132, 99, .24);
+}
+
+.dossier-scale-control > summary {
+  min-height: 42px;
+  border-color: rgba(99, 213, 255, .46);
+  background: rgba(99, 213, 255, .085);
+  font-size: 10px;
+}
+
+.dossier-scale-popover {
+  border-color: rgba(99, 213, 255, .5);
+  background:
+    linear-gradient(145deg, #142637, #0c1a28);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, .62);
+}
+
+.entry-panel,
+.crew-panel,
+.protocol-panel,
+.invite-card {
+  border-color: rgba(178, 204, 230, .3);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, .3),
+    inset 0 1px rgba(255, 255, 255, .03);
+}
+
+.field input,
+.compact-settings input,
+.compact-control input,
+.compact-settings select,
+.compact-control select,
+.select-row select,
+.time-select select {
+  border-color: rgba(178, 204, 230, .36);
+  background: rgba(6, 15, 24, .72);
+}
+
+.field input:hover,
+.compact-settings input:hover,
+.compact-control input:hover,
+.compact-settings select:hover,
+.compact-control select:hover,
+.select-row select:hover,
+.time-select select:hover {
+  border-color: rgba(99, 213, 255, .58);
+}
+
+@media (hover: hover) {
+  .game-shell .player-card:hover {
+    border-color: rgba(99, 213, 255, .48);
+    box-shadow:
+      0 calc(20px * var(--dossier-scale)) calc(52px * var(--dossier-scale)) rgba(0, 0, 0, .3),
+      inset 0 1px rgba(255, 255, 255, .045);
+    transform: translateY(-2px);
+  }
+
+  .game-shell .player-card.current:hover,
+  .game-shell .player-card.selected:hover,
+  .game-shell .player-card.excluded:hover {
+    transform: none;
+  }
+}
+
+@media (min-width: 2400px) {
+  :root {
+    --type-micro: 13px;
+    --type-label: 14px;
+    --type-control: 15px;
+    --type-body-small: 14px;
+    --type-body: 18px;
+    --type-card-value: 17px;
+  }
+
+  .game-shell {
+    --dossier-help-width: 34px;
+    --dossier-row-height: 43px;
+    --dossier-ability-height: 50px;
+  }
+}
+
+@media (min-width: 3400px) {
+  :root {
+    --type-micro: 16px;
+    --type-label: 17px;
+    --type-control: 18px;
+    --type-body-small: 17px;
+    --type-body: 22px;
+    --type-card-value: 20px;
+  }
+
+  .game-shell {
+    --dossier-help-width: 40px;
+    --dossier-row-height: 52px;
+    --dossier-ability-height: 62px;
+  }
+}
+
+@media (max-width: 760px) {
+  :root {
+    --type-micro: 11px;
+    --type-label: 11px;
+    --type-control: 13px;
+    --type-body-small: 13px;
+    --type-body: 15px;
+    --type-card-value: 13px;
+  }
+
+  .game-header {
+    background: rgba(6, 14, 22, .98);
+    backdrop-filter: none;
+  }
+
+  .game-shell .phase-bar {
+    padding: 18px 14px 20px;
+  }
+
+  .game-shell .phase-bar h1 {
+    margin-block: 7px;
+    font-size: 30px;
+  }
+
+  .game-shell .phase-bar p {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .scenario-stack {
+    scrollbar-color: rgba(99, 213, 255, .42) transparent;
+    scrollbar-width: thin;
+  }
+
+  .scenario-card {
+    border-color: rgba(178, 204, 230, .34);
+    box-shadow: 0 16px 34px rgba(0, 0, 0, .3);
+  }
+
+  .round-control-dock {
+    top: 4px;
+    border-color: rgba(99, 213, 255, .56);
+    border-radius: 12px;
+  }
+
+  .table-heading {
+    padding-bottom: 12px;
+  }
+
+  .table-heading strong {
+    font-size: 17px;
+  }
+
+  .table-heading-tools > em {
+    max-width: 230px;
+    font-size: 11px;
+  }
+
+  .dossier-scale-control > summary {
+    min-height: 44px;
+    padding: 8px 10px;
+  }
+
+  .game-shell {
+    --dossier-min-height: 405px;
+    --dossier-label-width: 108px;
+    --dossier-help-width: 30px;
+    --dossier-row-height: 37px;
+    --dossier-ability-height: 46px;
+  }
+
+  .game-shell .player-card {
+    border-radius: 14px;
+  }
+
+  .game-shell .player-profile-list button.profile-reveal-button {
+    min-height: calc(38px * var(--dossier-scale));
+    font-size: max(9px, calc(10px * var(--dossier-scale)));
+  }
+
+  .game-shell .player-profile-list .profile-row.can-reveal {
+    grid-template-columns:
+      calc(var(--dossier-label-width) * var(--dossier-scale))
+      calc(var(--dossier-help-width) * var(--dossier-scale))
+      minmax(0, 1fr)
+      calc(76px * var(--dossier-scale));
+  }
+
+  .game-shell .player-ability-summary > em {
+    min-height: calc(24px * var(--dossier-scale));
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .game-shell .vote-button,
+  .game-shell .player-profile-list .player-ability-controls .ability-button,
+  .round-control-dock .pass-turn-button,
+  .round-control-dock .host-phase-button,
+  .scale-popover-done {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --color-border: rgba(214, 231, 246, .48);
+    --color-border-strong: rgba(225, 238, 249, .72);
+    --color-text-muted: #bdcbd8;
+  }
+
+  .game-shell .player-profile-list .profile-row.hidden {
+    background: #0d1b28;
+  }
+
+  .game-shell .profile-row.hidden .profile-value > b {
+    color: #c1cfdb;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .game-header,
+  .round-control-dock,
+  .entry-panel {
+    backdrop-filter: none;
+    background-color: #0b1926;
+  }
+}
