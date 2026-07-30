@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 
 type Session = { code: string; playerId: string; token: string };
 type GameViewMode = "classic" | "tactical";
@@ -165,41 +166,75 @@ const profileCategories = Object.entries(categoryNames);
 function InfoTooltip({ label, text }: { label: string; text: string }) {
   const tooltipId = useId();
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ left: 12, top: 12, width: 260, above: true });
+  const showTooltip = (target: HTMLButtonElement) => {
+    const rect = target.getBoundingClientRect();
+    const width = Math.min(300, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left + rect.width / 2 - width / 2));
+    const above = rect.top > 170;
+    setPosition({
+      left,
+      top: above ? rect.top - 10 : rect.bottom + 10,
+      width,
+      above,
+    });
+    setOpen(true);
+  };
   useEffect(() => {
     if (!open) return;
     const dismiss = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    const dismissOnViewportChange = () => setOpen(false);
     document.addEventListener("keydown", dismiss);
-    return () => document.removeEventListener("keydown", dismiss);
+    window.addEventListener("scroll", dismissOnViewportChange, true);
+    window.addEventListener("resize", dismissOnViewportChange);
+    return () => {
+      document.removeEventListener("keydown", dismiss);
+      window.removeEventListener("scroll", dismissOnViewportChange, true);
+      window.removeEventListener("resize", dismissOnViewportChange);
+    };
   }, [open]);
   return (
-    <button
-      type="button"
-      className={`term-help ${open ? "open" : ""}`}
-      aria-label={`Пояснення терміна «${label}»`}
-      aria-describedby={tooltipId}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-      onClick={() => setOpen(true)}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          setOpen(false);
-          event.currentTarget.blur();
-        }
-      }}
-    >
-      <svg viewBox="0 0 20 20" aria-hidden="true">
-        <circle cx="10" cy="10" r="7.5" />
-        <path d="M10 9.2v4.1M10 6.7h.01" />
-      </svg>
-      <span id={tooltipId} className="term-tooltip" role="tooltip">
-        <strong>{label}</strong>
-        {text}
-      </span>
-    </button>
+    <>
+      <button
+        type="button"
+        className={`term-help ${open ? "open" : ""}`}
+        aria-label={`Пояснення терміна «${label}»`}
+        aria-describedby={open ? tooltipId : undefined}
+        aria-expanded={open}
+        onMouseEnter={(event) => showTooltip(event.currentTarget)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={(event) => showTooltip(event.currentTarget)}
+        onBlur={() => setOpen(false)}
+        onClick={(event) => showTooltip(event.currentTarget)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+            event.currentTarget.blur();
+          }
+        }}
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="10" cy="10" r="7.5" />
+          <path d="M10 9.2v4.1M10 6.7h.01" />
+        </svg>
+      </button>
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <span
+              id={tooltipId}
+              className={`term-tooltip term-tooltip-portal ${position.above ? "above" : "below"}`}
+              role="tooltip"
+              style={{ left: position.left, top: position.top, width: position.width }}
+            >
+              <strong>{label}</strong>
+              {text}
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
@@ -707,7 +742,7 @@ function PlayerCard({
     : profileCategories;
   const classifiedCount = profileCategories.length - displayedCategories.length;
   return (
-    <article className={`player-card ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}>
+    <article className={`player-card ${compactBallot ? "compact-ballot" : ""} ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}>
       <div className="player-topline">
         <span className={`avatar small ${player.isBot ? "bot-avatar" : ""}`}>{player.isBot ? "AI" : player.name.slice(0, 1).toUpperCase()}</span>
         <div><strong>{player.name}{player.isYou ? " · ви" : ""}</strong><small>Місце {String(player.seat).padStart(2, "0")}{player.isBot ? " · бот" : ""}</small></div>

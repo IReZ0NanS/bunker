@@ -3755,29 +3755,61 @@ input::placeholder {
   box-shadow: 0 16px 38px rgba(0, 0, 0, .2);
 }
 
-/* Tooltips must leave the dossier and paint above neighbouring cards. */
-.game-shell .player-card {
-  overflow: visible;
-  contain: none;
-  content-visibility: visible;
+/* Initial-board scroll performance and a top-level tooltip layer. */
+.game-shell {
+  background-attachment: scroll;
 }
 
-.game-shell .player-card:has(.term-help.open) {
-  z-index: 210;
+.game-shell .game-header {
+  background: #07121d;
+  backdrop-filter: none;
+}
+
+.game-shell .round-control-dock {
+  transform: translateZ(0);
+}
+
+.game-shell .player-card {
+  overflow: hidden;
+  content-visibility: auto;
+  contain-intrinsic-size: auto calc(var(--dossier-min-height) * var(--dossier-scale));
 }
 
 .game-shell .player-profile-list,
 .game-shell .player-ability-card {
-  overflow: visible;
+  overflow: hidden;
 }
 
-.game-shell .profile-row:has(.term-help.open),
-.game-shell .player-ability-card:has(.term-help.open) {
-  z-index: 220;
+.term-tooltip-portal {
+  position: fixed;
+  z-index: 10000;
+  display: block;
+  padding: 12px 14px;
+  border: 1px solid rgba(99, 213, 255, .58);
+  border-radius: 9px;
+  background: #172a3b;
+  color: #dce7f1;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .56);
+  font-size: var(--type-body-small);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  pointer-events: none;
 }
 
-.game-shell .player-profile-list .term-tooltip {
-  z-index: 230;
+.term-tooltip-portal.above {
+  transform: translateY(-100%);
+}
+
+.term-tooltip-portal strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--color-text);
+  font-size: var(--type-card-value);
+  font-weight: 760;
 }
 
 /* Option B: phase-aware tactical game board. */
@@ -4067,8 +4099,8 @@ input::placeholder {
     inset 0 0 0 1px rgba(112, 229, 173, .07);
 }
 
-.view-tactical.phase-voting .player-card:not(:has(.profile-reveal-button)),
-.view-tactical.phase-runoff .player-card:not(:has(.profile-reveal-button)) {
+.view-tactical.phase-voting .player-card.compact-ballot,
+.view-tactical.phase-runoff .player-card.compact-ballot {
   min-height: 0;
 }
 
@@ -4100,6 +4132,15 @@ input::placeholder {
 }
 
 @media (max-width: 760px) {
+  .term-tooltip-portal {
+    top: auto !important;
+    right: 12px;
+    bottom: 12px;
+    left: 12px !important;
+    width: auto !important;
+    transform: none !important;
+  }
+
   .view-tactical .phase-bar {
     min-height: 0;
     grid-template-columns: 1fr;

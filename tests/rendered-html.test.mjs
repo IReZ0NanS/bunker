@@ -106,6 +106,9 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(client, /Проголосували \{votesCast\}\/\{eligibleVoters\.length\}/);
   assert.match(client, /title: "Відкрите голосування"/);
   assert.match(client, /role="tooltip"/);
+  assert.match(client, /createPortal/);
+  assert.match(client, /term-tooltip-portal/);
+  assert.match(client, /dismissOnViewportChange/);
   assert.match(client, /event\.key === "Escape"/);
   assert.match(client, /type="number"/);
   assert.match(client, /seatsCount/);
@@ -138,8 +141,11 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.doesNotMatch(css, /\.player-ability-card\.hidden/);
   assert.match(css, /Lobby scroll performance/);
   assert.match(css, /\.lobby-shell \.ready-dock[\s\S]*backdrop-filter: none/);
-  assert.match(css, /\.player-card:has\(\.term-help\.open\)[\s\S]*z-index: 210/);
-  assert.match(css, /\.game-shell \.player-profile-list,[\s\S]*overflow: visible/);
+  assert.match(css, /Initial-board scroll performance/);
+  assert.match(css, /\.game-shell \{[\s\S]*background-attachment: scroll/);
+  assert.match(css, /\.game-shell \.player-card \{[\s\S]*content-visibility: auto/);
+  assert.match(css, /\.term-tooltip-portal \{[\s\S]*z-index: 10000/);
+  assert.doesNotMatch(css, /\.player-card:has\(\.term-help\.open\)/);
   assert.match(css, /Option B: phase-aware tactical game board/);
   assert.match(css, /\.view-tactical \.phase-progress/);
   assert.match(css, /\.view-tactical \.scenario-strip\.collapsed/);
