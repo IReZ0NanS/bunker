@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore,
 import { createPortal } from "react-dom";
 
 type Session = { code: string; playerId: string; token: string };
-type GameViewMode = "classic" | "tactical";
+type GameViewMode = "classic" | "tactical" | "dossier";
 type Card = {
   category: string;
   label: string;
@@ -84,7 +84,7 @@ const dossierScaleEvent = "bunker-protocol-dossier-scale-change";
 const gameViewModeKey = "bunker-protocol-view-mode";
 const gameViewModeEvent = "bunker-protocol-view-mode-change";
 let dossierScaleFallback = 100;
-let gameViewModeFallback: GameViewMode = "tactical";
+let gameViewModeFallback: GameViewMode = "dossier";
 
 function readDossierScale() {
   if (typeof window === "undefined") return 100;
@@ -112,10 +112,10 @@ function subscribeToDossierScale(callback: () => void) {
 }
 
 function readGameViewMode() {
-  if (typeof window === "undefined") return "tactical";
+  if (typeof window === "undefined") return "dossier";
   try {
     const savedMode = localStorage.getItem(gameViewModeKey);
-    if (savedMode === "classic" || savedMode === "tactical") {
+    if (savedMode === "classic" || savedMode === "tactical" || savedMode === "dossier") {
       gameViewModeFallback = savedMode;
     }
   } catch {
@@ -703,6 +703,7 @@ function PlayerCard({
   player,
   state,
   viewMode,
+  orbitStyle,
   onReveal,
   onVote,
   onUseAbility,
@@ -711,6 +712,7 @@ function PlayerCard({
   player: Player;
   state: GameState;
   viewMode: GameViewMode;
+  orbitStyle?: CSSProperties;
   onReveal: (category: string) => void;
   onVote: (id: string) => void;
   onUseAbility: (payload: Record<string, unknown>) => void;
@@ -742,7 +744,12 @@ function PlayerCard({
     : profileCategories;
   const classifiedCount = profileCategories.length - displayedCategories.length;
   return (
-    <article className={`player-card ${compactBallot ? "compact-ballot" : ""} ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}>
+    <article
+      className={`player-card ${compactBallot ? "compact-ballot" : ""} ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}
+      style={orbitStyle}
+      tabIndex={viewMode === "dossier" ? 0 : undefined}
+      aria-label={viewMode === "dossier" ? `Досьє гравця ${player.name}. Наведіть або натисніть, щоб збільшити.` : undefined}
+    >
       <div className="player-topline">
         <span className={`avatar small ${player.isBot ? "bot-avatar" : ""}`}>{player.isBot ? "AI" : player.name.slice(0, 1).toUpperCase()}</span>
         <div><strong>{player.name}{player.isYou ? " · ви" : ""}</strong><small>Місце {String(player.seat).padStart(2, "0")}{player.isBot ? " · бот" : ""}</small></div>
@@ -1025,6 +1032,14 @@ function ViewModeControl({
         onClick={() => onChange("tactical")}
       >
         Тактичний
+      </button>
+      <button
+        type="button"
+        className={value === "dossier" ? "active" : ""}
+        aria-pressed={value === "dossier"}
+        onClick={() => onChange("dossier")}
+      >
+        Живе досьє
         <span>Новий</span>
       </button>
     </div>
@@ -1056,6 +1071,30 @@ function PhaseProgress({ phase, round }: { phase: string; round: number }) {
   );
 }
 
+function DossierTableCenter({
+  state,
+  phaseTitle,
+  turnPlayer,
+}: {
+  state: GameState;
+  phaseTitle: string;
+  turnPlayer: Player | undefined;
+}) {
+  return (
+    <section className="dossier-table-center" aria-label="Центр ігрового столу">
+      <div className="table-center-seal" aria-hidden="true"><span>БП</span></div>
+      <small>Бункер · протокол {String(state.room.round).padStart(2, "0")}</small>
+      <strong>{phaseTitle}</strong>
+      <p>{turnPlayer ? `${turnPlayer.isYou ? "Ваш хід" : `Говорить ${turnPlayer.name}`}` : "Рішення приймає група"}</p>
+      <div className="table-center-scenarios">
+        <span><i />{state.room.catastrophe?.title ?? "Катастрофа"}</span>
+        <span><i />{state.room.bunker?.title ?? "Бункер"}</span>
+        <span><i />{state.room.outside?.title ?? "Поверхня"}</span>
+      </div>
+    </section>
+  );
+}
+
 function Game({
   state,
   busy,
@@ -1078,7 +1117,7 @@ function Game({
   onLeave: () => void;
 }) {
   const [conditionsExpanded, setConditionsExpanded] = useState(false);
-  const viewMode = useSyncExternalStore(subscribeToGameViewMode, readGameViewMode, () => "tactical");
+  const viewMode = useSyncExternalStore(subscribeToGameViewMode, readGameViewMode, () => "dossier");
   const updateViewMode = (nextMode: GameViewMode) => {
     gameViewModeFallback = nextMode;
     try {
@@ -1136,10 +1175,13 @@ function Game({
   const dossierStyle = {
     "--dossier-scale": dossierScale / 100,
   } as CSSProperties;
+  const yourPlayer = state.players.find((player) => player.isYou);
   const orderedPlayers =
-    viewMode === "tactical" && state.room.phase === "reveal" && turnPlayer
-      ? [turnPlayer, ...state.players.filter((player) => player.id !== turnPlayer.id)]
-      : state.players;
+    viewMode === "dossier" && yourPlayer
+      ? [yourPlayer, ...state.players.filter((player) => player.id !== yourPlayer.id)]
+      : viewMode === "tactical" && state.room.phase === "reveal" && turnPlayer
+        ? [turnPlayer, ...state.players.filter((player) => player.id !== turnPlayer.id)]
+        : state.players;
   return (
     <main className={`game-shell view-${viewMode} phase-${state.room.phase}`} style={dossierStyle}>
       <header className="game-header">
@@ -1164,7 +1206,7 @@ function Game({
               <section className={`scenario-strip ${conditionsExpanded ? "expanded" : "collapsed"}`} aria-label="Умови виживання">
                 <div className="scenario-strip-heading">
                   <span><small>Умови виживання</small><strong>Катастрофа · бункер · поверхня</strong></span>
-                  {viewMode === "tactical" && (
+                  {viewMode !== "classic" && (
                     <button
                       type="button"
                       className="scenario-toggle"
@@ -1209,18 +1251,31 @@ function Game({
                 </div>
               </div>
               <div className="player-grid">
-                {orderedPlayers.map((player) => (
-                  <PlayerCard
-                    key={player.id}
-                    player={player}
-                    state={state}
-                    viewMode={viewMode}
-                    onReveal={onReveal}
-                    onVote={onVote}
-                    onUseAbility={onUseAbility}
-                    busy={busy}
-                  />
-                ))}
+                {viewMode === "dossier" && (
+                  <DossierTableCenter state={state} phaseTitle={phase.title} turnPlayer={turnPlayer} />
+                )}
+                {orderedPlayers.map((player, index) => {
+                  const angle = Math.PI / 2 + (index / Math.max(1, orderedPlayers.length)) * Math.PI * 2;
+                  const orbitStyle = viewMode === "dossier"
+                    ? {
+                        "--orbit-left": `${50 + Math.cos(angle) * 38}%`,
+                        "--orbit-top": `${50 + Math.sin(angle) * 30}%`,
+                      } as CSSProperties
+                    : undefined;
+                  return (
+                    <PlayerCard
+                      key={player.id}
+                      player={player}
+                      state={state}
+                      viewMode={viewMode}
+                      orbitStyle={orbitStyle}
+                      onReveal={onReveal}
+                      onVote={onVote}
+                      onUseAbility={onUseAbility}
+                      busy={busy}
+                    />
+                  );
+                })}
               </div>
             </>
           )}

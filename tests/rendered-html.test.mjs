@@ -94,8 +94,14 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(client, /round-control-dock/);
   assert.match(client, /function ViewModeControl/);
   assert.match(client, /function PhaseProgress/);
+  assert.match(client, /function DossierTableCenter/);
   assert.match(client, /bunker-protocol-view-mode/);
+  assert.match(client, /"classic" \| "tactical" \| "dossier"/);
   assert.match(client, /view-\$\{viewMode\}/);
+  assert.match(client, /Живе досьє/);
+  assert.match(client, /--orbit-left/);
+  assert.match(client, /--orbit-top/);
+  assert.match(client, /Наведіть або натисніть, щоб збільшити/);
   assert.match(client, /Розгорнути умови/);
   assert.match(client, /classified-summary/);
   assert.match(client, /displayedCategories/);
@@ -151,6 +157,11 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(css, /\.view-tactical \.scenario-strip\.collapsed/);
   assert.match(css, /\.view-tactical\.phase-reveal \.player-card\.current/);
   assert.match(css, /\.view-tactical\.phase-voting \.player-card/);
+  assert.match(css, /Living dossier: a phase-aware table/);
+  assert.match(css, /\.view-dossier \.player-grid[\s\S]*position: relative/);
+  assert.match(css, /\.dossier-table-center[\s\S]*border-radius: 50%/);
+  assert.match(css, /\.view-dossier \.player-card:hover[\s\S]*--seat-scale: 1\.04/);
+  assert.match(css, /@media \(max-width: 1180px\)[\s\S]*scroll-snap-type: x mandatory/);
   assert.match(css, /Visual preset A: refined command-center surfaces/);
   assert.match(css, /button\.term-help,[\s\S]*width: calc\(28px \* var\(--dossier-scale\)\)/);
   assert.match(css, /@media \(prefers-contrast: more\)/);
