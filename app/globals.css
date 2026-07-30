@@ -3734,3 +3734,432 @@ input::placeholder {
     background-color: #0b1926;
   }
 }
+
+/* Lobby scroll performance: fixed/translucent layers were repainted on every frame. */
+.lobby-shell {
+  background-attachment: scroll;
+}
+
+.lobby-shell .game-header,
+.lobby-shell .ready-dock {
+  backdrop-filter: none;
+}
+
+.lobby-shell .ready-dock {
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, .22);
+  transform: translateZ(0);
+}
+
+.lobby-shell .crew-panel,
+.lobby-shell .protocol-panel {
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .2);
+}
+
+/* Tooltips must leave the dossier and paint above neighbouring cards. */
+.game-shell .player-card {
+  overflow: visible;
+  contain: none;
+  content-visibility: visible;
+}
+
+.game-shell .player-card:has(.term-help.open) {
+  z-index: 210;
+}
+
+.game-shell .player-profile-list,
+.game-shell .player-ability-card {
+  overflow: visible;
+}
+
+.game-shell .profile-row:has(.term-help.open),
+.game-shell .player-ability-card:has(.term-help.open) {
+  z-index: 220;
+}
+
+.game-shell .player-profile-list .term-tooltip {
+  z-index: 230;
+}
+
+/* Option B: phase-aware tactical game board. */
+.phase-progress {
+  display: none;
+}
+
+.view-mode-control {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: stretch;
+  flex: none;
+  padding: 3px;
+  border: 1px solid rgba(178, 204, 230, .3);
+  border-radius: 9px;
+  background: rgba(5, 14, 23, .56);
+}
+
+.view-mode-control button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9eb0c2;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 780;
+}
+
+.view-mode-control button:hover {
+  color: #e8f6ff;
+}
+
+.view-mode-control button.active {
+  background: rgba(99, 213, 255, .18);
+  color: #d8f6ff;
+  box-shadow: inset 0 0 0 1px rgba(99, 213, 255, .36);
+}
+
+.view-mode-control button span {
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: var(--color-success);
+  color: #072219;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.scenario-strip-heading > span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.scenario-toggle {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 7px 11px;
+  border: 1px solid rgba(99, 213, 255, .34);
+  border-radius: 8px;
+  background: rgba(99, 213, 255, .07);
+  color: #bceeff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 780;
+}
+
+.scenario-toggle:hover {
+  border-color: rgba(99, 213, 255, .62);
+  background: rgba(99, 213, 255, .14);
+}
+
+.scenario-toggle > span {
+  font-size: 14px;
+}
+
+.classified-summary {
+  min-height: calc(38px * var(--dossier-scale));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: calc(7px * var(--dossier-scale)) calc(10px * var(--dossier-scale));
+  border-bottom: 1px solid rgba(178, 204, 230, .12);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(112, 132, 153, .025) 0 7px,
+      rgba(112, 132, 153, .065) 7px 8px
+    );
+  color: #8395a8;
+}
+
+.classified-summary span {
+  font-size: max(9px, calc(9px * var(--dossier-scale)));
+  font-weight: 760;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.classified-summary strong {
+  min-width: 26px;
+  min-height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(178, 204, 230, .22);
+  border-radius: 999px;
+  color: #b8c6d4;
+  font-size: 11px;
+}
+
+.view-tactical .phase-bar {
+  min-height: 102px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(390px, 520px);
+  align-items: center;
+  gap: 28px;
+  padding-block: 14px;
+}
+
+.view-tactical .phase-bar::before {
+  display: none;
+}
+
+.view-tactical .phase-bar h1 {
+  margin-block: 4px;
+  font-size: clamp(27px, 2.2vw, 38px);
+}
+
+.view-tactical .phase-bar p {
+  display: none;
+}
+
+.view-tactical .phase-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.view-tactical .phase-progress li {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  color: #71869a;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.view-tactical .phase-progress li::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background: rgba(178, 204, 230, .17);
+}
+
+.view-tactical .phase-progress li:first-child::before {
+  display: none;
+}
+
+.view-tactical .phase-progress li > span {
+  position: relative;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(178, 204, 230, .24);
+  border-radius: 50%;
+  background: #0b1926;
+  color: #8fa3b6;
+  font-size: 10px;
+}
+
+.view-tactical .phase-progress li.complete,
+.view-tactical .phase-progress li.active {
+  color: #d4e8f4;
+}
+
+.view-tactical .phase-progress li.complete::before,
+.view-tactical .phase-progress li.active::before {
+  background: rgba(99, 213, 255, .62);
+}
+
+.view-tactical .phase-progress li.complete > span {
+  border-color: rgba(112, 229, 173, .64);
+  background: rgba(112, 229, 173, .16);
+  color: #9af0c7;
+}
+
+.view-tactical .phase-progress li.active > span {
+  border-color: var(--color-action);
+  background: var(--color-action);
+  color: var(--color-on-action);
+  box-shadow: 0 0 20px rgba(99, 213, 255, .28);
+}
+
+.view-tactical .table-panel {
+  padding-top: 14px;
+}
+
+.view-tactical .scenario-strip {
+  margin-bottom: 12px;
+}
+
+.view-tactical .scenario-strip-heading {
+  min-height: 40px;
+  margin-bottom: 7px;
+}
+
+.view-tactical .scenario-stack {
+  gap: 9px;
+}
+
+.view-tactical .scenario-card {
+  transition: min-height .2s ease, padding .2s ease;
+}
+
+.view-tactical .scenario-strip.collapsed .scenario-card {
+  min-height: 82px;
+  padding-block: 12px;
+}
+
+.view-tactical .scenario-strip.collapsed .scenario-card .scenario-body p,
+.view-tactical .scenario-strip.collapsed .scenario-card .scenario-body ul {
+  display: none;
+}
+
+.view-tactical .scenario-strip.collapsed .scenario-card .scenario-body h3 {
+  margin-bottom: 0;
+  font-size: clamp(14px, 1vw, 18px);
+}
+
+.view-tactical .round-control-dock {
+  top: 6px;
+  min-height: 66px;
+  margin-bottom: 12px;
+  border-color: rgba(99, 213, 255, .6);
+  background: linear-gradient(110deg, #132d40, #0b1d2c);
+}
+
+.view-tactical .table-heading {
+  min-height: 52px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+}
+
+.view-tactical .player-grid {
+  align-items: start;
+  gap: calc(12px * var(--dossier-scale));
+}
+
+.view-tactical.phase-reveal .player-card.current {
+  grid-column: span 2;
+  order: -1;
+  border-color: var(--color-success);
+  box-shadow:
+    0 0 0 1px rgba(112, 229, 173, .22),
+    0 24px 56px rgba(5, 54, 47, .34);
+}
+
+.view-tactical.phase-reveal .player-card.current .player-topline strong {
+  font-size: calc(16px * var(--dossier-scale));
+}
+
+.view-tactical.phase-discussion .profile-row.public {
+  box-shadow:
+    inset 3px 0 rgba(112, 229, 173, .86),
+    inset 0 0 0 1px rgba(112, 229, 173, .07);
+}
+
+.view-tactical.phase-voting .player-card:not(:has(.profile-reveal-button)),
+.view-tactical.phase-runoff .player-card:not(:has(.profile-reveal-button)) {
+  min-height: 0;
+}
+
+.view-tactical.phase-voting .player-effects:empty,
+.view-tactical.phase-runoff .player-effects:empty {
+  min-height: 8px;
+  margin-top: 3px;
+}
+
+.view-tactical.phase-voting .player-card:not(.excluded),
+.view-tactical.phase-runoff .player-card:not(.excluded) {
+  border-color: rgba(255, 124, 138, .34);
+}
+
+.view-tactical.phase-voting .vote-button,
+.view-tactical.phase-runoff .vote-button {
+  min-height: 46px;
+  margin-top: 12px;
+}
+
+@media (max-width: 1120px) {
+  .view-tactical .phase-bar {
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 430px);
+  }
+
+  .view-tactical.phase-reveal .player-card.current {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 760px) {
+  .view-tactical .phase-bar {
+    min-height: 0;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .view-tactical .phase-progress {
+    width: 100%;
+  }
+
+  .view-tactical .phase-progress li {
+    font-size: 8px;
+  }
+
+  .view-tactical .scenario-strip-heading {
+    align-items: center;
+  }
+
+  .view-tactical .scenario-strip-heading > span strong {
+    display: none;
+  }
+
+  .scenario-toggle {
+    min-height: 44px;
+    padding-inline: 10px;
+    font-size: 9px;
+  }
+
+  .view-tactical .scenario-stack {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+
+  .view-mode-control {
+    min-height: 44px;
+  }
+
+  .view-mode-control button {
+    min-height: 36px;
+    padding-inline: 9px;
+  }
+
+  .table-heading-tools {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .view-tactical .table-heading {
+    display: grid;
+  }
+
+  .view-tactical .table-heading-tools {
+    flex-flow: row wrap;
+    justify-content: flex-start;
+  }
+
+  .view-tactical .table-heading-tools > em {
+    width: 100%;
+    max-width: none;
+    text-align: left;
+  }
+}
