@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 
 type Session = { code: string; playerId: string; token: string };
@@ -79,7 +79,7 @@ type GameState = {
 };
 
 const sessionKey = "bunker-protocol-session";
-const dossierScaleKey = "bunker-protocol-dossier-scale";
+const dossierScaleKey = "bunker-protocol-dossier-scale-v3";
 const dossierScaleEvent = "bunker-protocol-dossier-scale-change";
 const siteThemeKey = "bunker-protocol-theme";
 const siteThemeEvent = "bunker-protocol-theme-change";
@@ -90,7 +90,7 @@ function readDossierScale() {
   if (typeof window === "undefined") return 100;
   try {
     const savedScale = Number(localStorage.getItem(dossierScaleKey));
-    if (Number.isFinite(savedScale) && savedScale >= 80 && savedScale <= 125) {
+    if (Number.isFinite(savedScale) && savedScale >= 80 && savedScale <= 150) {
       dossierScaleFallback = savedScale;
     }
   } catch {
@@ -145,15 +145,6 @@ function writeSiteTheme(nextTheme: SiteTheme) {
   }
   window.dispatchEvent(new Event(siteThemeEvent));
 }
-
-const phaseCopy: Record<string, { eyebrow: string; title: string; hint: string }> = {
-  briefing: { eyebrow: "Вхідні дані", title: "Оцініть загрозу", hint: "Система готує досьє та відкриває умови експедиції." },
-  reveal: { eyebrow: "Особисті досьє", title: "Відкриття характеристик", hint: "Активний гравець обирає одну карту й аргументує її користь." },
-  discussion: { eyebrow: "Спільний канал", title: "Відкрита дискусія", hint: "Порівняйте ризики, прогалини та комбінації навичок." },
-  voting: { eyebrow: "Рішення групи", title: "Таємне голосування", hint: "Оберіть людину, без якої група має найбільші шанси." },
-  runoff: { eyebrow: "Нічия", title: "Переголосування", hint: "Вибір обмежено кандидатами з однаковим результатом." },
-  finished: { eyebrow: "Протокол завершено", title: "Шлюз зачинено", hint: "Система оцінила фінальний склад експедиції." },
-};
 
 const timeOptions = {
   reveal: [0, 30, 60, 90, 120, 180, 300],
@@ -308,6 +299,7 @@ function Logo({ onHome }: { onHome?: () => void }) {
 
 function ThemeSwitcher() {
   const theme = useSyncExternalStore(subscribeToSiteTheme, readSiteTheme, () => "command");
+  const [open, setOpen] = useState(false);
   const themes: { value: SiteTheme; label: string; hint: string }[] = [
     { value: "command", label: "Командний", hint: "Холодний блакитний" },
     { value: "ember", label: "Аварійний", hint: "Бурштин і жар" },
@@ -316,33 +308,60 @@ function ThemeSwitcher() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
   const selectedTheme = themes.find((item) => item.value === theme) ?? themes[0];
   return (
-    <details className="theme-switcher">
-      <summary aria-label={`Тема інтерфейсу: ${selectedTheme.label}`}>
+    <div className="theme-switcher">
+      <button
+        type="button"
+        className="theme-trigger"
+        aria-label={`Тема інтерфейсу: ${selectedTheme.label}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen(true)}
+      >
         <span className={`theme-swatch swatch-${theme}`} aria-hidden="true" />
         <span><small>Тема</small><strong>{selectedTheme.label}</strong></span>
-      </summary>
-      <div className="theme-popover" role="group" aria-label="Кольорова тема сайту">
-        <small>Кольорова атмосфера</small>
-        {themes.map((item) => (
-          <button
-            type="button"
-            key={item.value}
-            className={theme === item.value ? "active" : ""}
-            aria-pressed={theme === item.value}
-            onClick={(event) => {
-              writeSiteTheme(item.value);
-              event.currentTarget.closest("details")?.removeAttribute("open");
-            }}
-          >
-            <span className={`theme-swatch swatch-${item.value}`} aria-hidden="true" />
-            <span><strong>{item.label}</strong><small>{item.hint}</small></span>
-            <b aria-hidden="true">{theme === item.value ? "✓" : ""}</b>
-          </button>
-        ))}
-      </div>
-    </details>
+      </button>
+      {open && typeof document !== "undefined" && createPortal(
+        <div className="theme-layer" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setOpen(false);
+        }}>
+          <section className="theme-popover" role="dialog" aria-modal="true" aria-labelledby="theme-dialog-title">
+            <div className="theme-popover-heading">
+              <span><small>Вигляд інтерфейсу</small><strong id="theme-dialog-title">Оберіть атмосферу</strong></span>
+              <button type="button" className="theme-close" aria-label="Закрити меню тем" onClick={() => setOpen(false)}>×</button>
+            </div>
+            <div className="theme-options" role="group" aria-label="Кольорова тема сайту">
+              {themes.map((item) => (
+                <button
+                  type="button"
+                  key={item.value}
+                  className={theme === item.value ? "active" : ""}
+                  aria-pressed={theme === item.value}
+                  onClick={() => {
+                    writeSiteTheme(item.value);
+                    setOpen(false);
+                  }}
+                >
+                  <span className={`theme-swatch swatch-${item.value}`} aria-hidden="true" />
+                  <span><strong>{item.label}</strong><small>{item.hint}</small></span>
+                  <b aria-hidden="true">{theme === item.value ? "✓" : ""}</b>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
+    </div>
   );
 }
 
@@ -411,30 +430,6 @@ function Landing({
   const [tab, setTab] = useState<"create" | "join">(initialCode ? "join" : "create");
   const [name, setName] = useState("");
   const [code, setCode] = useState(initialCode);
-  const [advanced, setAdvanced] = useState(false);
-  const [settings, setSettings] = useState({
-    minPlayers: 8,
-    maxPlayers: 8,
-    seatsCount: 4,
-    revealSeconds: 0,
-    discussionSeconds: 0,
-    votingSeconds: 0,
-    publicVotes: true,
-    excludedCanVote: false,
-    victoryRule: "survival",
-  });
-
-  const update = (key: string, value: string | number | boolean) =>
-    setSettings((current) => ({ ...current, [key]: value }));
-  const updatePlayerCount = (value: number) => {
-    const playerCount = Math.min(12, Math.max(4, value));
-    setSettings((current) => ({
-      ...current,
-      minPlayers: playerCount,
-      maxPlayers: playerCount,
-      seatsCount: Math.min(current.seatsCount, playerCount - 1),
-    }));
-  };
 
   return (
     <main className="landing-shell">
@@ -509,56 +504,17 @@ function Landing({
             />
           </div>
         ) : (
-          <>
-            <div className="compact-settings">
-              <label>
-                <span>Учасників у грі</span>
-                <input type="number" min={4} max={12} step={1} inputMode="numeric" value={settings.maxPlayers} onChange={(event) => updatePlayerCount(Number(event.target.value))} />
-                <small>Від 4 до 12</small>
-              </label>
-              <label>
-                <span>Залишаться в бункері</span>
-                <input type="number" min={2} max={settings.maxPlayers - 1} step={1} inputMode="numeric" value={settings.seatsCount} onChange={(event) => update("seatsCount", Math.min(settings.maxPlayers - 1, Math.max(2, Number(event.target.value))))} />
-                <small>Від 2 до {settings.maxPlayers - 1}</small>
-              </label>
-            </div>
-            <button
-              type="button"
-              className="advanced-button"
-              aria-expanded={advanced}
-              aria-controls="advanced-room-settings"
-              onClick={() => setAdvanced((value) => !value)}
-            >
-              <span>Налаштування протоколу</span><i className={advanced ? "open" : ""}>⌄</i>
-            </button>
-            {advanced && (
-              <div className="advanced-settings" id="advanced-room-settings">
-                <div className="unlimited-preset">
-                  <span><strong>Розмовляйте досхочу</strong><small>Рекомендовано для гри без поспіху</small></span>
-                  <button onClick={() => setSettings((current) => ({ ...current, revealSeconds: 0, discussionSeconds: 0, votingSeconds: 0 }))}>Без таймерів</button>
-                </div>
-                <TimeSelect label="Хід і розповідь" description="Час на картку та аргументи" value={settings.revealSeconds} options={timeOptions.reveal} onChange={(value) => update("revealSeconds", value)} />
-                <TimeSelect label="Загальна дискусія" description="Обговорення після кола" value={settings.discussionSeconds} options={timeOptions.discussion} onChange={(value) => update("discussionSeconds", value)} />
-                <TimeSelect label="Голосування" description="Час на фінальний вибір" value={settings.votingSeconds} options={timeOptions.voting} onChange={(value) => update("votingSeconds", value)} />
-                <Toggle checked={settings.publicVotes} onChange={(value) => update("publicVotes", value)} label="Відкрите голосування" description="Показувати кількість голосів на картках" />
-                <Toggle checked={settings.excludedCanVote} onChange={(value) => update("excludedCanVote", value)} label="Голос вигнаних" description="Виключені зберігають вплив" />
-                <label className="select-row">
-                  <span><strong>Умови перемоги</strong><small>Що враховує фінальний аналіз</small></span>
-                  <select value={settings.victoryRule} onChange={(event) => update("victoryRule", event.target.value)}>
-                    <option value="survival">Виживання</option>
-                    <option value="legacy">Спадкоємність</option>
-                  </select>
-                </label>
-              </div>
-            )}
-          </>
+          <div className="creation-note">
+            <span aria-hidden="true">01</span>
+            <p><strong>Спочатку створіть кімнату.</strong> Кількість гравців, місця й таймери творець налаштує один раз — у лобі.</p>
+          </div>
         )}
 
         {error && <div className="error-note" role="alert">{error}</div>}
         <button
           className="primary-button"
           disabled={busy || (tab === "join" && code.length !== 6)}
-          onClick={() => tab === "create" ? onCreate({ name, settings }) : onJoin({ name, code })}
+          onClick={() => tab === "create" ? onCreate({ name }) : onJoin({ name, code })}
         >
           {busy ? "Встановлюємо зв’язок…" : tab === "create" ? "Увійти гостем і створити гру" : "Увійти гостем до кімнати"}
           <span>→</span>
@@ -670,30 +626,41 @@ function Lobby({
               </div>
             ))}
           </div>
+          <div className="bot-controls lobby-crew-tools">
+            <div>
+              <span><strong>Гравці-боти</strong><small>Допоможуть швидко зібрати повну групу</small></span>
+              <b>{botCount}</b>
+            </div>
+            {state.you.canManageBots ? (
+              <div className="bot-actions">
+                <button disabled={busy || !hasFreeSeats} onClick={() => onAddBots(1)}>+ Додати одного</button>
+                {missingForStart > 0 ? (
+                  <button disabled={busy || !hasFreeSeats} onClick={() => onAddBots(missingForStart)}>Заповнити вільні місця</button>
+                ) : null}
+              </div>
+            ) : (
+              <p>Керувати ботами може творець кімнати.</p>
+            )}
+          </div>
         </section>
         <aside className="protocol-panel">
           <div className="panel-heading">
             <span><small>Правила кімнати</small><strong>{state.you.canManageBots ? "Налаштуйте гру" : "Обрані параметри"}</strong></span>
             {state.you.canManageBots && <em>Ви — творець</em>}
           </div>
-          <div className="bot-controls">
-            <div>
-              <span><strong>Гравці-боти</strong><small>Самі відкривають карти й голосують</small></span>
-              <b>{botCount}</b>
-            </div>
-            {state.you.canManageBots ? (
-              <div className="bot-actions">
-                <button disabled={busy || !hasFreeSeats} onClick={() => onAddBots(1)}>+ Додати бота</button>
-                {missingForStart > 1 ? (
-                  <button disabled={busy || !hasFreeSeats} onClick={() => onAddBots(missingForStart)}>Заповнити до старту</button>
-                ) : null}
-              </div>
-            ) : (
-              <p>Додавати й прибирати ботів може творець кімнати.</p>
-            )}
-          </div>
+          <dl className="settings-summary lobby-settings-summary">
+            <div><dt>Учасників</dt><dd>{state.room.settings.maxPlayers}</dd></div>
+            <div><dt>Місць у бункері</dt><dd>{state.room.settings.seatsCount}</dd></div>
+            <div><dt>Темп гри</dt><dd>{state.room.settings.revealSeconds || state.room.settings.discussionSeconds || state.room.settings.votingSeconds ? "з таймерами" : "без таймерів"}</dd></div>
+            <div><dt>Голосування</dt><dd>{state.room.settings.publicVotes ? "відкрите" : "таємне"}</dd></div>
+          </dl>
           {state.you.canManageBots ? (
-            <div className="lobby-settings">
+            <details className="lobby-settings-disclosure">
+              <summary>
+                <span><strong>Змінити параметри гри</strong><small>Кількість місць, таймери та голосування</small></span>
+                <b aria-hidden="true">⌄</b>
+              </summary>
+              <div className="lobby-settings">
               <button
                 className="manual-mode-button"
                 onClick={() => setDraft((current) => ({ ...current, revealSeconds: 0, discussionSeconds: 0, votingSeconds: 0 }))}
@@ -727,19 +694,13 @@ function Lobby({
                 {settingsChanged ? "Зберегти правила" : "Правила збережено"}
               </button>
               <small className="ready-reset-note">Після зміни правил живі гравці підтверджують готовність повторно.</small>
-            </div>
+              </div>
+            </details>
           ) : (
-            <dl className="settings-summary">
-              <div><dt>Учасників у грі</dt><dd>{state.room.settings.maxPlayers}</dd></div>
-              <div><dt>Місць у сховищі</dt><dd>{state.room.settings.seatsCount}</dd></div>
-              <div><dt>Хід і розповідь</dt><dd>{durationLabel(state.room.settings.revealSeconds)}</dd></div>
-              <div><dt>Дискусія</dt><dd>{durationLabel(state.room.settings.discussionSeconds)}</dd></div>
-              <div><dt>Голосування</dt><dd>{durationLabel(state.room.settings.votingSeconds)}</dd></div>
-              <div><dt>Голоси</dt><dd>{state.room.settings.publicVotes ? "відкриті" : "таємні"}</dd></div>
-            </dl>
+            <p className="guest-settings-note">Творець кімнати може змінити ці параметри до початку гри.</p>
           )}
-          <div className="rules-explainer">
-            <strong>Як проходить гра</strong>
+          <details className="rules-explainer">
+            <summary>Як проходить гра <span aria-hidden="true">⌄</span></summary>
             <ol>
               <li><b>Відкрийте картку.</b> Уже в першому колі кожен сам обирає характеристику.</li>
               <li><b>Розкажіть про себе.</b> Без таймера можна говорити скільки потрібно.</li>
@@ -748,7 +709,7 @@ function Lobby({
               <li><b>Активуйте особливі картки.</b> Вони змінюють досьє, обмінюють характеристики або впливають на голоси.</li>
             </ol>
             <p>Випадкових подій між раундами більше немає — у центрі гри люди, аргументи й активні картки.</p>
-          </div>
+          </details>
         </aside>
       </div>
       <div className="ready-dock">
@@ -857,7 +818,16 @@ function PlayerCard({
                 <b>{known ? card?.value ?? "—" : "?"}</b>
               </span>
               {canReveal && (
-                <button type="button" className="profile-reveal-button" disabled={busy} onClick={() => onReveal(category)}>Відкрити →</button>
+                <button
+                  type="button"
+                  className="profile-reveal-button"
+                  disabled={busy}
+                  aria-label={`Відкрити характеристику «${label}»`}
+                  title={`Відкрити: ${label}`}
+                  onClick={() => onReveal(category)}
+                >
+                  <span aria-hidden="true">✓</span>
+                </button>
               )}
             </div>
           );
@@ -935,36 +905,42 @@ function PlayerAbilityCard({
         <div className="spectator-note">Ви поза основним сховищем, але можете стежити за рішенням групи{state.room.settings.excludedCanVote ? " та голосувати" : ""}.</div>
       )}
       {player.isYou && !abilityUsed && ability && (
-        <div className="player-ability-controls">
-          {(needsTarget || needsCategory) && (
-            <div className="ability-fields">
-              {needsTarget && (
-                <label>
-                  <span>Гравець</span>
-                  <select value={abilityTarget} onChange={(event) => setAbilityTarget(event.target.value)}>
-                    <option value="">Оберіть гравця</option>
-                    {activeTargets.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
-                  </select>
-                </label>
-              )}
-              {needsCategory && (
-                <label>
-                  <span>Характеристика</span>
-                  <select value={abilityCategory} onChange={(event) => setAbilityCategory(event.target.value)}>
-                    {profileCategories.map(([category, label]) => <option key={category} value={category}>{label}</option>)}
-                  </select>
-                </label>
-              )}
-            </div>
-          )}
-          <button
-            className="ability-button"
-            disabled={busy || !abilityAvailable || (needsTarget && !abilityTarget)}
-            onClick={() => onUseAbility({ targetId: abilityTarget, category: abilityCategory })}
-          >
-            {votingAbility && !["voting", "runoff"].includes(state.room.phase) ? "Доступно під час голосування" : "Активувати картку"}
-          </button>
-        </div>
+        <details className="player-ability-controls">
+          <summary>
+            <span>{votingAbility && !["voting", "runoff"].includes(state.room.phase) ? "Під час голосування" : "Використати"}</span>
+            <span aria-hidden="true">⌄</span>
+          </summary>
+          <div className="ability-control-panel">
+            {(needsTarget || needsCategory) && (
+              <div className="ability-fields">
+                {needsTarget && (
+                  <label>
+                    <span>Гравець</span>
+                    <select value={abilityTarget} onChange={(event) => setAbilityTarget(event.target.value)}>
+                      <option value="">Оберіть гравця</option>
+                      {activeTargets.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
+                    </select>
+                  </label>
+                )}
+                {needsCategory && (
+                  <label>
+                    <span>Характеристика</span>
+                    <select value={abilityCategory} onChange={(event) => setAbilityCategory(event.target.value)}>
+                      {profileCategories.map(([category, label]) => <option key={category} value={category}>{label}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )}
+            <button
+              className="ability-button"
+              disabled={busy || !abilityAvailable || (needsTarget && !abilityTarget)}
+              onClick={() => onUseAbility({ targetId: abilityTarget, category: abilityCategory })}
+            >
+              {votingAbility && !["voting", "runoff"].includes(state.room.phase) ? "Недоступно зараз" : "Активувати"}
+            </button>
+          </div>
+        </details>
       )}
     </section>
   );
@@ -1021,9 +997,13 @@ function DossierScaleControl({
   onChange: (value: number) => void;
 }) {
   const presets = [
-    { value: 85, label: "Компактно" },
-    { value: 100, label: "Стандарт" },
-    { value: 115, label: "Збільшено" },
+    { value: 80, label: "Огляд" },
+    { value: 90, label: "Щільно" },
+    { value: 100, label: "Звичайно" },
+    { value: 110, label: "Зручно" },
+    { value: 120, label: "Більше" },
+    { value: 135, label: "Великий" },
+    { value: 150, label: "Максимум" },
   ];
   return (
     <details className="dossier-scale-control">
@@ -1042,7 +1022,7 @@ function DossierScaleControl({
           <input
             type="range"
             min="80"
-            max="125"
+            max="150"
             step="5"
             value={value}
             aria-label="Масштаб карток гравців"
@@ -1076,6 +1056,42 @@ function DossierScaleControl({
   );
 }
 
+function AbilityActivationNotice({ state }: { state: GameState }) {
+  const latestAbilityEvent = [...state.room.log].reverse().find((entry) => entry.kind === "ability");
+  const latestKey = latestAbilityEvent ? `${latestAbilityEvent.at}:${latestAbilityEvent.text}` : "";
+  const latestText = latestAbilityEvent?.text ?? "";
+  const seenEvent = useRef(latestKey);
+  const [notice, setNotice] = useState<{ key: string; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!latestKey || !latestText || seenEvent.current === latestKey) return;
+    seenEvent.current = latestKey;
+    const nextNotice = { key: latestKey, text: latestText };
+    const showTimer = window.setTimeout(() => setNotice(nextNotice), 0);
+    const hideTimer = window.setTimeout(() => setNotice((current) => current?.key === latestKey ? null : current), 5200);
+    return () => {
+      window.clearTimeout(showTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, [latestKey, latestText]);
+
+  if (!notice) return null;
+  return createPortal(
+    <div className="ability-activation-layer" role="status" aria-live="assertive">
+      <div className="ability-activation-burst" aria-hidden="true"><i /><i /><i /></div>
+      <article className="ability-activation-notice">
+        <span className="ability-activation-symbol" aria-hidden="true">✦</span>
+        <div>
+          <small>Протокол змінено</small>
+          <strong>Активна карта використана</strong>
+          <p>{notice.text}</p>
+        </div>
+      </article>
+    </div>,
+    document.body,
+  );
+}
+
 function Game({
   state,
   busy,
@@ -1097,20 +1113,7 @@ function Game({
   onHome: () => void;
   onLeave: () => void;
 }) {
-  const phase =
-    state.room.round === 1 && state.room.phase === "discussion"
-      ? {
-          eyebrow: "Перше коло",
-          title: "Обговорення без голосування",
-          hint: "Після дискусії гра одразу перейде до другого раунду — у першому колі ніхто не вибуває.",
-        }
-      : state.room.phase === "voting" && state.room.settings.publicVotes
-        ? {
-            ...phaseCopy.voting,
-            title: "Відкрите голосування",
-            hint: "Оберіть кандидата. Кількість отриманих голосів оновлюється на картках у реальному часі.",
-          }
-      : phaseCopy[state.room.phase] ?? phaseCopy.briefing;
+  const [scenariosCollapsed, setScenariosCollapsed] = useState(false);
   const turnPlayer = state.players.find((player) => player.seat === state.room.turnSeat);
   const yourTurn = state.room.phase === "reveal" && turnPlayer?.isYou && state.you.active;
   const revealedThisRound = state.you.revealed.length >= state.room.round;
@@ -1133,7 +1136,7 @@ function Game({
   const votesCast = eligibleVoters.filter((player) => player.hasVoted).length;
   const dossierScale = useSyncExternalStore(subscribeToDossierScale, readDossierScale, () => 100);
   const updateDossierScale = (nextValue: number) => {
-    const safeValue = Math.min(125, Math.max(80, Math.round(nextValue / 5) * 5));
+    const safeValue = Math.min(150, Math.max(80, Math.round(nextValue / 5) * 5));
     dossierScaleFallback = safeValue;
     try {
       localStorage.setItem(dossierScaleKey, String(safeValue));
@@ -1146,61 +1149,60 @@ function Game({
     "--dossier-scale": dossierScale / 100,
   } as CSSProperties;
   return (
-    <main className={`game-shell phase-${state.room.phase}`} style={dossierStyle}>
+    <main className={`game-shell phase-${state.room.phase} ${scenariosCollapsed ? "scenarios-collapsed" : ""}`} style={dossierStyle}>
       <header className="game-header">
         <Logo onHome={onHome} />
-        <div className="room-pill"><small>Кімната</small><strong>{state.room.code}</strong></div>
+        <div className="game-room-tools">
+          <div className="room-pill"><small>Кімната</small><strong>{state.room.code}</strong></div>
+          <DossierScaleControl value={dossierScale} onChange={updateDossierScale} />
+        </div>
         <div className="game-meta">
           <span><small>Раунд</small><strong>{String(state.room.round).padStart(2, "0")}</strong></span>
           <span><small>У бункері</small><strong>{state.players.filter((player) => player.active).length}/{state.room.seats}</strong></span>
+          <RoundTimer phaseEndsAt={state.room.phaseEndsAt} />
+          {(yourTurn && revealedThisRound) && <button className="pass-turn-button game-header-action" disabled={busy} onClick={onPassTurn}>Передати хід →</button>}
+          {canSkipTurn && <button className="host-phase-button game-header-action" disabled={busy} onClick={onPassTurn}>Пропустити хід</button>}
+          {manualPhaseLabel && <button className="host-phase-button primary game-header-action" disabled={busy} onClick={onAdvancePhase}>{manualPhaseLabel}</button>}
           <ThemeSwitcher />
           <button className="quiet-button" onClick={onLeave}>Вийти</button>
         </div>
       </header>
 
-      <section className="phase-bar">
-        <div className="phase-copy"><small>{phase.eyebrow}</small><h1>{phase.title}</h1><p>{phase.hint}</p></div>
-      </section>
-
       <div className="game-layout">
-        <section className="table-panel">
-          {state.room.status === "finished" ? <Finished state={state} /> : (
-            <>
-              <section className="scenario-strip" aria-label="Умови виживання">
-                <div className="scenario-strip-heading">
-                  <span><small>Умови виживання</small><strong>Катастрофа · бункер · поверхня</strong></span>
-                </div>
-                <div className="scenario-stack">
-                  <ScenarioCard number="01" label="Катастрофа" scenario={state.room.catastrophe} variant="catastrophe" />
-                  <ScenarioCard number="02" label="Бункер" scenario={state.room.bunker} variant="bunker" />
-                  <ScenarioCard number="03" label="Стан поверхні" scenario={state.room.outside} variant="outside" />
-                </div>
-              </section>
-              <section className="round-control-dock" aria-label="Керування раундом">
-                <div className="round-control-status">
-                  <span className="control-round">Раунд {String(state.room.round).padStart(2, "0")}</span>
-                  <strong>{turnPlayer ? `${turnPlayer.isYou ? "Ваш хід" : `Хід: ${turnPlayer.name}`}` : phase.title}</strong>
-                  <small>{yourTurn && !revealedThisRound ? "Оберіть характеристику у своїй картці" : phase.hint}</small>
-                </div>
-                <div className="round-control-actions">
-                  {(yourTurn && revealedThisRound) && <button className="pass-turn-button" disabled={busy} onClick={onPassTurn}>Передати хід →</button>}
-                  {canSkipTurn && <button className="host-phase-button" disabled={busy} onClick={onPassTurn}>Пропустити хід: {turnPlayer.name}</button>}
-                  {manualPhaseLabel && <button className="host-phase-button primary" disabled={busy} onClick={onAdvancePhase}>{manualPhaseLabel}</button>}
-                  <RoundTimer phaseEndsAt={state.room.phaseEndsAt} />
-                </div>
-              </section>
-              <div className={`table-heading ${["voting", "runoff"].includes(state.room.phase) ? "voting-heading" : ""}`}>
-                <span><small>Кандидати</small><strong>{state.players.filter((player) => player.active).length} активних</strong></span>
-                <div className="table-heading-tools">
-                  {["voting", "runoff"].includes(state.room.phase) && (
-                    <em>
-                      {state.you.voteTarget ? "✓ Ваш голос зафіксовано" : "Оберіть кандидата нижче"}
-                      {" · "}Проголосували {votesCast}/{eligibleVoters.length}
-                    </em>
-                  )}
-                  <DossierScaleControl value={dossierScale} onChange={updateDossierScale} />
-                </div>
+        {state.room.status === "finished" ? (
+          <section className="table-panel finale-panel"><Finished state={state} /></section>
+        ) : (
+          <>
+            <aside className="game-context-panel" aria-label="Умови виживання">
+              <div className="scenario-panel-heading">
+                <span>
+                  <small>Вхідні дані місії</small>
+                  <strong>{scenariosCollapsed ? "Умови приховано" : "Умови виживання"}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="scenario-visibility-button"
+                  aria-expanded={!scenariosCollapsed}
+                  aria-controls="scenario-cards"
+                  onClick={() => setScenariosCollapsed((collapsed) => !collapsed)}
+                >
+                  <span aria-hidden="true">{scenariosCollapsed ? "⌄" : "⌃"}</span>
+                  {scenariosCollapsed ? "Показати умови" : "Приховати умови"}
+                </button>
               </div>
+              <div className="scenario-stack" id="scenario-cards">
+                <ScenarioCard number="01" label="Катастрофа" scenario={state.room.catastrophe} variant="catastrophe" />
+                <ScenarioCard number="02" label="Бункер" scenario={state.room.bunker} variant="bunker" />
+                <ScenarioCard number="03" label="Стан поверхні" scenario={state.room.outside} variant="outside" />
+              </div>
+            </aside>
+            <section className="table-panel">
+              {["voting", "runoff"].includes(state.room.phase) && (
+                <div className="game-vote-status">
+                  {state.you.voteTarget ? "✓ Голос зафіксовано" : "Оберіть кандидата"}
+                  {" · "}{votesCast}/{eligibleVoters.length}
+                </div>
+              )}
               <div className="player-grid">
                 {state.players.map((player) => (
                   <PlayerCard
@@ -1214,10 +1216,11 @@ function Game({
                   />
                 ))}
               </div>
-            </>
-          )}
-        </section>
+            </section>
+          </>
+        )}
       </div>
+      <AbilityActivationNotice state={state} />
     </main>
   );
 }
