@@ -472,8 +472,22 @@ function Landing({
         )}
         <div className="guest-badge"><span>✓</span> Гостьовий вхід без реєстрації</div>
         <div className="entry-tabs">
-          <button className={tab === "create" ? "active" : ""} onClick={() => setTab("create")}>Нова кімната</button>
-          <button className={tab === "join" ? "active" : ""} onClick={() => setTab("join")}>Увійти за кодом</button>
+          <button
+            type="button"
+            className={tab === "create" ? "active" : ""}
+            aria-pressed={tab === "create"}
+            onClick={() => setTab("create")}
+          >
+            Нова кімната
+          </button>
+          <button
+            type="button"
+            className={tab === "join" ? "active" : ""}
+            aria-pressed={tab === "join"}
+            onClick={() => setTab("join")}
+          >
+            Увійти за кодом
+          </button>
         </div>
 
         <div className="field">
@@ -508,11 +522,17 @@ function Landing({
                 <small>Від 2 до {settings.maxPlayers - 1}</small>
               </label>
             </div>
-            <button className="advanced-button" onClick={() => setAdvanced((value) => !value)}>
+            <button
+              type="button"
+              className="advanced-button"
+              aria-expanded={advanced}
+              aria-controls="advanced-room-settings"
+              onClick={() => setAdvanced((value) => !value)}
+            >
               <span>Налаштування протоколу</span><i className={advanced ? "open" : ""}>⌄</i>
             </button>
             {advanced && (
-              <div className="advanced-settings">
+              <div className="advanced-settings" id="advanced-room-settings">
                 <div className="unlimited-preset">
                   <span><strong>Розмовляйте досхочу</strong><small>Рекомендовано для гри без поспіху</small></span>
                   <button onClick={() => setSettings((current) => ({ ...current, revealSeconds: 0, discussionSeconds: 0, votingSeconds: 0 }))}>Без таймерів</button>
@@ -569,7 +589,7 @@ function Lobby({
   onHome: () => void;
   onLeave: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [draft, setDraft] = useState<RoomSettings>(state.room.settings);
   const readyCount = state.players.filter((player) => player.ready).length;
   const botCount = state.players.filter((player) => player.isBot).length;
@@ -590,9 +610,14 @@ function Lobby({
   const copyInvite = async () => {
     const url = new URL(window.location.href);
     url.searchParams.set("room", state.room.code);
-    await navigator.clipboard.writeText(url.toString());
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard is unavailable");
+      await navigator.clipboard.writeText(url.toString());
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+    window.setTimeout(() => setCopyStatus("idle"), 2400);
   };
   return (
     <main className="lobby-shell">
@@ -610,7 +635,13 @@ function Lobby({
       </section>
       <section className="invite-card">
         <div><small>Код доступу</small><strong>{state.room.code}</strong></div>
-        <button onClick={copyInvite}>{copied ? "Посилання скопійовано" : "Скопіювати запрошення"}</button>
+        <button type="button" aria-live="polite" onClick={copyInvite}>
+          {copyStatus === "copied"
+            ? "Посилання скопійовано"
+            : copyStatus === "failed"
+              ? "Не вдалося — скопіюйте код"
+              : "Скопіювати запрошення"}
+        </button>
       </section>
       <div className="lobby-grid">
         <section className="crew-panel">
@@ -996,7 +1027,7 @@ function DossierScaleControl({
   ];
   return (
     <details className="dossier-scale-control">
-      <summary>
+      <summary aria-label={`Масштаб карток: ${value}%`}>
         <span aria-hidden="true">⚙</span>
         Масштаб карток
         <b>{value}%</b>
@@ -1004,7 +1035,7 @@ function DossierScaleControl({
       <div className="dossier-scale-popover">
         <div className="scale-popover-heading">
           <span><small>Вигляд досьє</small><strong>Розмір карток і тексту</strong></span>
-          <output>{value}%</output>
+          <output aria-live="polite">{value}%</output>
         </div>
         <label className="dossier-scale-range">
           <span>Менше</span>
@@ -1221,7 +1252,7 @@ export default function GameClient() {
         const nextState = data.state;
         setState((current) => current && gameStateFingerprint(current) === gameStateFingerprint(nextState) ? current : nextState);
       }
-      setError("");
+      if (!quiet) setError("");
     } catch (reason) {
       if (!quiet) setError(reason instanceof Error ? reason.message : "Немає зв’язку із сервером.");
     }
@@ -1246,7 +1277,7 @@ export default function GameClient() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || showHome) return;
     let requestInFlight = false;
     const refresh = async (quiet: boolean) => {
       if (requestInFlight) return;
@@ -1270,7 +1301,7 @@ export default function GameClient() {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [session, loadState]);
+  }, [session, showHome, loadState]);
 
   const post = async (payload: Record<string, unknown>, includeSession = false) => {
     setBusy(true);
@@ -1297,6 +1328,15 @@ export default function GameClient() {
   };
 
   const leave = () => {
+    const current = session;
+    if (current) {
+      void fetch("/api/game", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "leave", ...current }),
+        keepalive: true,
+      }).catch(() => undefined);
+    }
     saveSession(null);
     setState(null);
     setError("");

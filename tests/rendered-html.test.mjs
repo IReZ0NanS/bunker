@@ -33,6 +33,7 @@ test("renders the guest entry screen", async () => {
   assert.match(html, /Гостьовий вхід без реєстрації/);
   assert.match(html, /Увійти гостем і створити гру/);
   assert.match(html, /Жодних акаунтів чи паролів/);
+  assert.match(html, /og-social\.png/);
   assert.doesNotMatch(html, /codex-preview/);
 });
 
@@ -90,6 +91,10 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(client, /function RoundTimer/);
   assert.match(client, /gameStateFingerprint/);
   assert.match(client, /document\.visibilityState === "visible"/);
+  assert.match(client, /if \(!session \|\| showHome\) return/);
+  assert.match(client, /if \(!quiet\) setError\(""\)/);
+  assert.match(client, /action: "leave"/);
+  assert.match(client, /keepalive: true/);
   assert.match(client, /scenario-strip/);
   assert.match(client, /round-control-dock/);
   assert.doesNotMatch(client, /function ViewModeControl/);
@@ -167,6 +172,10 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(css, /@media \(prefers-contrast: more\)/);
   assert.match(css, /@media \(prefers-reduced-transparency: reduce\)/);
   assert.match(api, /function claimActiveAbility/);
+  assert.match(api, /action === "leave"/);
+  assert.match(api, /DELETE FROM players WHERE id = \?/);
+  assert.match(api, /DELETE FROM rooms WHERE code = \?/);
+  assert.match(api, /UPDATE players SET seat = 1 WHERE id = \?/);
   assert.match(api, /WHERE id = \? AND revealed_json = \?/);
   assert.match(api, /request\.headers\.get\("Authorization"\)/);
   assert.match(api, /room\.status === "finished"[\s\S]*allCards\.filter\(\(card\) => card\.category !== "special"\)/);

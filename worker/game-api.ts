@@ -205,8 +205,8 @@ function cleanSettings(input: unknown): Settings {
     revealSeconds: cleanDuration(source.revealSeconds, 15, 300, defaultSettings.revealSeconds),
     discussionSeconds: cleanDuration(source.discussionSeconds, 30, 600, defaultSettings.discussionSeconds),
     votingSeconds: cleanDuration(source.votingSeconds, 15, 300, defaultSettings.votingSeconds),
-    publicVotes: Boolean(source.publicVotes),
-    excludedCanVote: Boolean(source.excludedCanVote),
+    publicVotes: source.publicVotes === undefined ? defaultSettings.publicVotes : Boolean(source.publicVotes),
+    excludedCanVote: source.excludedCanVote === undefined ? defaultSettings.excludedCanVote : Boolean(source.excludedCanVote),
     victoryRule: source.victoryRule === "legacy" ? "legacy" : "survival",
   };
 }
@@ -835,7 +835,23 @@ async function handleAction(db: D1Database, body: Record<string, unknown>) {
   if (!player) return json({ error: "Сесію не підтверджено. Приєднайтеся до кімнати знову." }, 401);
   const action = text(body.action);
 
-  if (action === "ready") {
+  if (action === "leave") {
+    if (room.status === "lobby") {
+      await db.prepare("DELETE FROM players WHERE id = ?").bind(player.id).run();
+      const remaining = await playersByRoom(db, code);
+      const remainingHumans = remaining.filter((item) => !isBot(item));
+      if (!remainingHumans.length) {
+        await db.prepare("DELETE FROM rooms WHERE code = ?").bind(code).run();
+      } else {
+        if (player.seat === 1) {
+          const nextHost = remainingHumans[0]!;
+          await db.prepare("UPDATE players SET seat = 1 WHERE id = ?").bind(nextHost.id).run();
+        }
+        await appendLog(db, room, { kind: "system", text: `${player.name} залишає кімнату.` });
+      }
+    }
+    return json({ ok: true });
+  } else if (action === "ready") {
     if (room.status !== "lobby") return json({ error: "Гра вже почалася." }, 409);
     await db.prepare("UPDATE players SET ready = ?, last_seen = ? WHERE id = ?").bind(body.ready ? 1 : 0, Date.now(), player.id).run();
     room = (await roomByCode(db, code))!;

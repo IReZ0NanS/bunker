@@ -34,9 +34,9 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       locale: "uk_UA",
-      images: [{ url: "/og.png", width: 1734, height: 907, alt: "Бункер: Протокол виживання" }],
+      images: [{ url: "/og-social.png", width: 1200, height: 628, alt: "Бункер: Протокол виживання" }],
     },
-    twitter: { card: "summary_large_image", title, description, images: ["/og.png"] },
+    twitter: { card: "summary_large_image", title, description, images: ["/og-social.png"] },
   };
 }
 
