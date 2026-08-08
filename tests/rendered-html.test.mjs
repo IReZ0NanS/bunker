@@ -97,7 +97,7 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(client, /keepalive: true/);
   assert.match(client, /scenario-stack/);
   assert.match(client, /game-room-tools/);
-  assert.match(client, /game-header-action/);
+  assert.match(client, /game-action-bar/);
   assert.match(client, /game-vote-status/);
   assert.doesNotMatch(client, /className="round-control-dock"/);
   assert.doesNotMatch(client, /phaseCopy/);
@@ -119,7 +119,7 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(client, /onCreate\(\{ name \}\)/);
   assert.match(client, /Кількість гравців, місця й таймери творець налаштує один раз/);
   assert.match(client, /aria-label={`Відкрити характеристику «\${label}»`}/);
-  assert.match(client, /Наведіть або сфокусуйте картку, щоб збільшити/);
+  assert.match(client, /aria-label=\{`\$\{player\.isYou && !player\.active/);
   assert.match(client, /profile-icon/);
   assert.match(client, /term-help/);
   assert.match(client, /term-help-placeholder/);
@@ -143,8 +143,8 @@ test("keeps bot play and one-click controls wired", async () => {
   for (const ability of ["reroll_self", "swap", "immunity", "expose", "scramble", "double_vote"]) {
     assert.match(data, new RegExp(`\"${ability}\"`));
   }
-  assert.match(css, /\.vote-button[\s\S]*font-size: 11px/);
-  assert.match(css, /\.scenario-body p[\s\S]*font-size: 13px/);
+  assert.match(css, /\.vote-button \{[\s\S]*min-height: 44px[\s\S]*font-size: max\(12px, calc\(13px \* var\(--dossier-scale\)\)\)/);
+  assert.match(css, /\.scenario-body p \{[\s\S]*font-size: var\(--t-label\);[\s\S]*line-height: 1\.42/);
   for (const scenario of ["catastrophe", "bunker", "outside"]) {
     assert.match(css, new RegExp(`url\\("\\/scenario-${scenario}\\.avif"\\) type\\("image\\/avif"\\)`));
     assert.match(css, new RegExp(`url\\("\\/scenario-${scenario}\\.webp"\\) type\\("image\\/webp"\\)`));
@@ -157,26 +157,20 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(css, /@keyframes player-excluded/);
   assert.match(css, /content-visibility: auto/);
   assert.match(css, /--color-action: #63d5ff/);
-  assert.match(css, /\.term-help\.open \.term-tooltip/);
-  assert.match(css, /button\.term-help[\s\S]*grid-template-columns: 1fr/);
-  assert.match(css, /\.term-tooltip \{[\s\S]*left: -12px;[\s\S]*right: auto/);
+  assert.match(css, /\.term-help \{[\s\S]*border-radius: 50%/);
+  assert.match(css, /\.term-help:hover, \.term-help\.open/);
   assert.match(css, /\.player-vote-tally/);
   assert.match(css, /\.player-ability-card\.concealed/);
   assert.doesNotMatch(css, /\.player-ability-card\.hidden/);
-  assert.match(css, /Lobby scroll performance/);
-  assert.match(css, /\.lobby-shell \.ready-dock[\s\S]*backdrop-filter: none/);
-  assert.match(css, /Initial-board scroll performance/);
   assert.match(css, /\.game-shell \{[\s\S]*background-attachment: scroll/);
-  assert.match(css, /\.game-shell \.player-card \{[\s\S]*content-visibility: auto/);
+  assert.match(css, /\.player-card \{[\s\S]*content-visibility: auto/);
   assert.match(css, /\.term-tooltip-portal \{[\s\S]*z-index: 10000/);
   assert.doesNotMatch(css, /\.player-card:has\(\.term-help\.open\)/);
   assert.doesNotMatch(css, /Option B: phase-aware tactical game board/);
   assert.doesNotMatch(css, /Living dossier: a phase-aware table/);
   assert.doesNotMatch(css, /\.view-tactical/);
   assert.doesNotMatch(css, /\.view-dossier/);
-  assert.match(css, /One classic board: hover magnification/);
-  assert.match(css, /\.game-shell \.player-card:hover[\s\S]*scale\(1\.065\)/);
-  assert.match(css, /\.game-shell\.phase-voting \.player-card:hover[\s\S]*scale\(1\.035\)/);
+  assert.match(css, /@media \(hover: hover\) and \(pointer: fine\) \{\s*\.player-card:hover, \.player-card:focus-within/);
   assert.match(css, /Atmospheric color themes/);
   assert.match(css, /html\[data-theme="ember"\]/);
   assert.match(css, /html\[data-theme="biosphere"\]/);
@@ -186,19 +180,16 @@ test("keeps bot play and one-click controls wired", async () => {
   assert.match(css, /url\("\/bunker-game-field-v2\.png"\)/);
   assert.match(css, /\.ability-activation-layer/);
   assert.match(css, /@keyframes ability-notice-in/);
-  assert.match(css, /height: calc\(100svh - 140px\)/);
-  assert.match(css, /Compact game table v3/);
-  assert.match(css, /Game table v4: controls in the header, richer compact scenario cards/);
-  assert.match(css, /Complete scenario briefing: readable copy, illustrated cards and a collapsible intro/);
-  assert.match(css, /\.game-shell\.scenarios-collapsed \.game-layout/);
+  assert.match(css, /min-height: calc\(100svh - 56px\)/);
+  assert.match(css, /Єдина дизайн-система|єдина дизайн-система/);
+  assert.match(css, /\.game-action-bar \{[\s\S]*position: sticky[\s\S]*top: 56px/);
+  assert.match(css, /\.game-shell\.scenarios-collapsed \.game-context-panel/);
   assert.match(css, /\.game-shell\.scenarios-collapsed \.scenario-stack \{ display: none; \}/);
   assert.match(css, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(css, /\.game-header \.game-room-tools \.dossier-scale-popover/);
   assert.match(css, /\.game-context-panel \.scenario-body ul \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(css, /\.game-context-panel \.scenario-body p \{[\s\S]*font-size: 1rem;[\s\S]*line-height: 1\.35/);
-  assert.match(css, /\.game-context-panel \.scenario-body li \{[\s\S]*font-size: 1rem;[\s\S]*line-height: 1\.3/);
-  assert.match(css, /Visual preset A: refined command-center surfaces/);
-  assert.match(css, /button\.term-help,[\s\S]*width: calc\(28px \* var\(--dossier-scale\)\)/);
+  assert.match(css, /\.game-context-panel \.scenario-body li \{[\s\S]*font-size: var\(--t-micro\);[\s\S]*line-height: 1\.3/);
+  assert.match(css, /\.profile-row \.term-help \{ width: max\(20px, calc\(22px \* var\(--dossier-scale\)\)\)/);
   assert.match(css, /@media \(prefers-contrast: more\)/);
   assert.match(css, /@media \(prefers-reduced-transparency: reduce\)/);
   assert.match(api, /function claimActiveAbility/);

@@ -1,82 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-
-type Session = { code: string; playerId: string; token: string };
-type SiteTheme = "command" | "ember" | "biosphere";
-type Card = {
-  category: string;
-  label: string;
-  value: string;
-  note: string;
-  tone: "good" | "mixed" | "risk";
-  action?: "reroll_self" | "swap" | "immunity" | "expose" | "scramble" | "double_vote";
-};
-type Scenario = { title: string; description: string; facts: string[] };
-type RoomSettings = {
-  minPlayers: number;
-  maxPlayers: number;
-  seatsCount: number;
-  revealSeconds: number;
-  discussionSeconds: number;
-  votingSeconds: number;
-  publicVotes: boolean;
-  excludedCanVote: boolean;
-  victoryRule: "survival" | "legacy";
-};
-type Player = {
-  id: string;
-  name: string;
-  seat: number;
-  ready: boolean;
-  active: boolean;
-  online: boolean;
-  isBot: boolean;
-  isYou: boolean;
-  revealed: Card[];
-  character?: Card[];
-  ability?: Card;
-  abilityUsed: boolean;
-  hasVoted: boolean;
-  protected: boolean;
-  doubleVote: boolean;
-};
-type GameState = {
-  serverNow: number;
-  room: {
-    code: string;
-    status: "lobby" | "playing" | "finished";
-    phase: string;
-    round: number;
-    phaseEndsAt: number | null;
-    turnSeat: number | null;
-    seats: number;
-    settings: RoomSettings;
-    catastrophe: Scenario | null;
-    bunker: Scenario | null;
-    outside: Scenario | null;
-    runoff: string[];
-    log: { at: number; kind: string; text: string }[];
-    outcome: { score: number; title: string; summary: string; legacyReady: boolean; victoryRule: string } | null;
-    votes: Record<string, string>;
-    voteCounts: Record<string, number>;
-  };
-  players: Player[];
-  you: {
-    id: string;
-    name: string;
-    seat: number;
-    ready: boolean;
-    active: boolean;
-    character: Card[];
-    revealed: string[];
-    voteTarget: string | null;
-    canManageBots: boolean;
-    canControlPhases: boolean;
-    abilityUsed: boolean;
-  };
-};
+import type { Card, GameState, Player, RoomSettings, Scenario, Session, SiteTheme } from "@/shared/types";
 
 const sessionKey = "bunker-protocol-session";
 const dossierScaleKey = "bunker-protocol-dossier-scale-v3";
@@ -273,11 +199,8 @@ function formatSeconds(value: number) {
 }
 
 function gameStateFingerprint(state: GameState) {
-  return JSON.stringify({
-    room: state.room,
-    players: state.players,
-    you: state.you,
-  });
+  const { room, players, you } = state;
+  return `${room.status}|${room.phase}|${room.round}|${room.phaseEndsAt ?? ""}|${room.turnSeat ?? ""}|${room.seats}|${room.runoff}|${room.log.length}|${room.outcome?.score ?? ""}|${players.map((p) => `${p.id}:${p.active ? 1 : 0}|${p.ready ? 1 : 0}|${p.online ? 1 : 0}|${p.revealed.length}|${p.hasVoted ? 1 : 0}|${p.protected ? 1 : 0}|${p.abilityUsed ? 1 : 0}`).join(",")}|${you.revealed.length}|${you.voteTarget ?? ""}|${you.abilityUsed ? 1 : 0}|${you.active ? 1 : 0}`;
 }
 
 function Logo({ onHome }: { onHome?: () => void }) {
@@ -713,7 +636,10 @@ function Lobby({
         </aside>
       </div>
       <div className="ready-dock">
-        <span>{state.you.ready ? "Ви готові. Очікуємо решту групи." : `Для старту зберіть ${state.room.settings.minPlayers} учасників і підтвердьте готовність усіх.`}</span>
+        <span className="ready-progress">
+          <strong><em>{readyCount}</em> / {state.players.length}</strong>
+          <small>{state.you.ready ? "Ви готові — очікуємо решту групи." : `Для старту зберіть щонайменше ${state.room.settings.minPlayers} учасників і підтвердьте готовність усіх.`}</small>
+        </span>
         <button className={state.you.ready ? "secondary-button" : "primary-button"} disabled={busy} onClick={() => onReady(!state.you.ready)}>
           {state.you.ready ? "Скасувати готовність" : "Я готовий"}
         </button>
@@ -722,7 +648,7 @@ function Lobby({
   );
 }
 
-function ScenarioCard({
+const ScenarioCard = memo(function ScenarioCard({
   number,
   label,
   scenario,
@@ -745,9 +671,9 @@ function ScenarioCard({
       </div>
     </article>
   );
-}
+});
 
-function PlayerCard({
+const PlayerCard = memo(function PlayerCard({
   player,
   state,
   onReveal,
@@ -779,11 +705,20 @@ function PlayerCard({
     ["voting", "runoff"].includes(state.room.phase) &&
     player.active &&
     (state.room.phase !== "runoff" || state.room.runoff.includes(player.id));
+  const handleKeyDown = canVote
+    ? (event: React.KeyboardEvent) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onVote(player.id);
+        }
+      }
+    : undefined;
   return (
     <article
-      className={`player-card ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}
-      tabIndex={0}
-      aria-label={`Досьє гравця ${player.name}. Наведіть або сфокусуйте картку, щоб збільшити.`}
+      className={`player-card ${player.isYou ? "is-you" : ""} ${!player.active ? "excluded" : ""} ${isTurn ? "current" : ""} ${selected ? "selected" : ""}`}
+      tabIndex={canVote ? 0 : undefined}
+      aria-label={`${player.isYou && !player.active ? "Ви — поза бункером і вибули з гри " : "Досьє гравця "}${player.name}${isTurn ? ". Зараз говорить пауза." : ""}`}
+      onKeyDown={ handleKeyDown }
     >
       <div className="player-topline">
         <span className={`avatar small ${player.isBot ? "bot-avatar" : ""}`}>{player.isBot ? "AI" : player.name.slice(0, 1).toUpperCase()}</span>
@@ -853,13 +788,16 @@ function PlayerCard({
       {!player.active && <div className="excluded-stamp">Поза бункером</div>}
       {isTurn && <div className="turn-badge">Зараз говорить</div>}
       {canVote && (
-        <button className={`vote-button ${selected ? "selected" : ""}`} disabled={busy} onClick={() => onVote(player.id)}>
+        <button className={`vote-button ${selected ? "selected" : ""}`} disabled={busy} onClick={() => onVote(player.id)}
+          aria-label={`Віддати голос за ${player.name}`}
+          aria-pressed={selected}
+        >
           {selected ? "✓ Ваш голос за цього гравця" : "Віддати голос"}
         </button>
       )}
     </article>
   );
-}
+});
 
 function PlayerAbilityCard({
   player,
@@ -946,7 +884,7 @@ function PlayerAbilityCard({
   );
 }
 
-function Finished({ state }: { state: GameState }) {
+const Finished = memo(function Finished({ state }: { state: GameState }) {
   const survivors = state.players.filter((player) => player.active);
   const outcome = state.room.outcome;
   return (
@@ -962,16 +900,28 @@ function Finished({ state }: { state: GameState }) {
       )}
       <div className="survivor-grid">
         {survivors.map((player) => (
-          <article key={player.id}>
-            <span className="avatar">{player.name.slice(0, 1).toUpperCase()}</span>
-            <h3>{player.name}</h3>
-            <p>{player.character?.find((card) => card.category === "profession")?.value}</p>
+          <article key={player.id} className="survivor-card">
+            <header className="survivor-head">
+              <span className="avatar">{player.name.slice(0, 1).toUpperCase()}</span>
+              <h3>{player.name}</h3>
+            </header>
+            <dl className="survivor-dossier">
+              {profileCategories.map(([category, label]) => {
+                const card = player.character?.find((item) => item.category === category);
+                return (
+                  <div key={category} className="survivor-fact">
+                    <dt><CharacteristicIcon category={category} />{label}</dt>
+                    <dd>{card?.value ?? "—"}</dd>
+                  </div>
+                );
+              })}
+            </dl>
           </article>
         ))}
       </div>
     </section>
   );
-}
+});
 
 function RoundTimer({ phaseEndsAt }: { phaseEndsAt: number | null }) {
   const [now, setNow] = useState(() => Date.now());
@@ -1092,6 +1042,85 @@ function AbilityActivationNotice({ state }: { state: GameState }) {
   );
 }
 
+const phaseTitles: Record<string, string> = {
+  briefing: "Брифінг",
+  reveal: "Відкриття карток",
+  discussion: "Дискусія",
+  voting: "Голосування",
+  runoff: "Переголосування",
+};
+
+const ActionBar = memo(function ActionBar({
+  state,
+  busy,
+  onPassTurn,
+  onAdvancePhase,
+}: {
+  state: GameState;
+  busy: boolean;
+  onPassTurn: () => void;
+  onAdvancePhase: () => void;
+}) {
+  const turnPlayer = state.players.find((player) => player.seat === state.room.turnSeat);
+  const yourTurn = state.room.phase === "reveal" && turnPlayer?.isYou && state.you.active;
+  const revealedThisRound = state.you.revealed.length >= state.room.round;
+  const canSkipTurn = state.room.phase === "reveal" && state.you.canControlPhases && turnPlayer && !turnPlayer.isYou && !turnPlayer.isBot;
+  const manualPhaseLabel =
+    state.you.canControlPhases
+      ? state.room.phase === "briefing"
+        ? "Почати відкриття карток"
+        : state.room.phase === "discussion"
+          ? state.room.round === 1
+            ? "Перейти до другого раунду"
+            : "Почати голосування"
+          : ["voting", "runoff"].includes(state.room.phase)
+            ? "Завершити голосування"
+            : ""
+      : "";
+  const eligibleVoters = state.room.settings.excludedCanVote
+    ? state.players
+    : state.players.filter((player) => player.active);
+  const votesCast = eligibleVoters.filter((player) => player.hasVoted).length;
+  const voting = ["voting", "runoff"].includes(state.room.phase);
+  const statusText =
+    state.room.phase === "briefing"
+      ? state.you.canControlPhases
+        ? "Перегляньте умови місії та починайте, коли група готова"
+        : "Творець кімнати незабаром почне відкриття карток"
+      : state.room.phase === "reveal"
+        ? yourTurn
+          ? revealedThisRound
+            ? "Характеристику відкрито — передайте хід"
+            : "Ваш хід — оберіть характеристику у своєму досьє"
+          : `Зараз говорить: ${turnPlayer?.name ?? "…"}`
+        : state.room.phase === "discussion"
+          ? state.room.round === 1
+            ? "Перше коло — обговорення без голосування"
+            : "Обговоріть відкриті факти перед голосуванням"
+          : state.room.phase === "voting"
+            ? "Оберіть, кого група залишає поза бункером"
+            : "Нічия — голосуємо лише між цими кандидатами";
+  return (
+    <section className="game-action-bar" aria-label="Поточна фаза та дії">
+      <div className="action-bar-status">
+        <strong>{phaseTitles[state.room.phase] ?? "Гра"}</strong>
+        <span>{statusText}</span>
+      </div>
+      <div className="action-bar-actions">
+        {voting && (
+          <div className="game-vote-status" aria-live="polite">
+            {state.you.voteTarget ? "✓ Голос зафіксовано" : "Оберіть кандидата"}
+            {" · "}{votesCast}/{eligibleVoters.length}
+          </div>
+        )}
+        {(yourTurn && revealedThisRound) && <button className="pass-turn-button" disabled={busy} onClick={onPassTurn}>Передати хід →</button>}
+        {canSkipTurn && <button className="host-phase-button" disabled={busy} onClick={onPassTurn}>Пропустити хід</button>}
+        {manualPhaseLabel && <button className="host-phase-button primary" disabled={busy} onClick={onAdvancePhase}>{manualPhaseLabel}</button>}
+      </div>
+    </section>
+  );
+});
+
 function Game({
   state,
   busy,
@@ -1114,26 +1143,6 @@ function Game({
   onLeave: () => void;
 }) {
   const [scenariosCollapsed, setScenariosCollapsed] = useState(false);
-  const turnPlayer = state.players.find((player) => player.seat === state.room.turnSeat);
-  const yourTurn = state.room.phase === "reveal" && turnPlayer?.isYou && state.you.active;
-  const revealedThisRound = state.you.revealed.length >= state.room.round;
-  const canSkipTurn = state.room.phase === "reveal" && state.you.canControlPhases && turnPlayer && !turnPlayer.isYou && !turnPlayer.isBot;
-  const manualPhaseLabel =
-    state.you.canControlPhases
-      ? state.room.phase === "briefing"
-        ? "Почати відкриття карток"
-        : state.room.phase === "discussion"
-          ? state.room.round === 1
-            ? "Перейти до другого раунду"
-            : "Почати голосування"
-          : ["voting", "runoff"].includes(state.room.phase)
-            ? "Завершити голосування"
-            : ""
-      : "";
-  const eligibleVoters = state.room.settings.excludedCanVote
-    ? state.players
-    : state.players.filter((player) => player.active);
-  const votesCast = eligibleVoters.filter((player) => player.hasVoted).length;
   const dossierScale = useSyncExternalStore(subscribeToDossierScale, readDossierScale, () => 100);
   const updateDossierScale = (nextValue: number) => {
     const safeValue = Math.min(150, Math.max(80, Math.round(nextValue / 5) * 5));
@@ -1160,9 +1169,6 @@ function Game({
           <span><small>Раунд</small><strong>{String(state.room.round).padStart(2, "0")}</strong></span>
           <span><small>У бункері</small><strong>{state.players.filter((player) => player.active).length}/{state.room.seats}</strong></span>
           <RoundTimer phaseEndsAt={state.room.phaseEndsAt} />
-          {(yourTurn && revealedThisRound) && <button className="pass-turn-button game-header-action" disabled={busy} onClick={onPassTurn}>Передати хід →</button>}
-          {canSkipTurn && <button className="host-phase-button game-header-action" disabled={busy} onClick={onPassTurn}>Пропустити хід</button>}
-          {manualPhaseLabel && <button className="host-phase-button primary game-header-action" disabled={busy} onClick={onAdvancePhase}>{manualPhaseLabel}</button>}
           <ThemeSwitcher />
           <button className="quiet-button" onClick={onLeave}>Вийти</button>
         </div>
@@ -1196,13 +1202,8 @@ function Game({
                 <ScenarioCard number="03" label="Стан поверхні" scenario={state.room.outside} variant="outside" />
               </div>
             </aside>
+            <ActionBar state={state} busy={busy} onPassTurn={onPassTurn} onAdvancePhase={onAdvancePhase} />
             <section className="table-panel">
-              {["voting", "runoff"].includes(state.room.phase) && (
-                <div className="game-vote-status">
-                  {state.you.voteTarget ? "✓ Голос зафіксовано" : "Оберіть кандидата"}
-                  {" · "}{votesCast}/{eligibleVoters.length}
-                </div>
-              )}
               <div className="player-grid">
                 {state.players.map((player) => (
                   <PlayerCard
